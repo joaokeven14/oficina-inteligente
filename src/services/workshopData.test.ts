@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { listCustomers, reverseFinancialEntry, saveCustomer, saveVehicle, uploadServiceOrderPhoto, uploadWorkshopLogo } from './workshopData';
+import { inviteWorkshopEmployee, listCustomers, reverseFinancialEntry, saveCustomer, saveVehicle, uploadServiceOrderPhoto, uploadWorkshopLogo } from './workshopData';
 import type { CustomerInput, VehicleInput } from '../types/workshop';
 
 const noNetworkClient = {} as SupabaseClient;
@@ -16,6 +16,36 @@ const validVehicle: VehicleInput = {
 };
 
 describe('workshop data validation', () => {
+  it('reports that a newly invited employee must accept the email invitation', async () => {
+    const invoke = jest.fn().mockResolvedValue({ data: { membership_id: 'membership-a', reused_existing_account: false, invitation_sent: true }, error: null });
+    const client = { functions: { invoke } } as unknown as SupabaseClient;
+    const permissions = { dashboard: { view: true, create: false, update: false, delete: false } };
+
+    const result = await inviteWorkshopEmployee('tenant-a', 'Pessoa Teste', 'funcionario@example.com', permissions, client);
+
+    expect(invoke).toHaveBeenCalledWith('manage-workshop', {
+      body: { action: 'invite_employee', workshop_id: 'tenant-a', full_name: 'Pessoa Teste', email: 'funcionario@example.com', permissions },
+    });
+    expect(result).toEqual({ reusedExistingAccount: false, invitationSent: true });
+  });
+
+  it('reports when an existing employee account was linked without another email', async () => {
+    const invoke = jest.fn().mockResolvedValue({ data: { membership_id: 'membership-b', reused_existing_account: true, invitation_sent: false }, error: null });
+    const client = { functions: { invoke } } as unknown as SupabaseClient;
+
+    const result = await inviteWorkshopEmployee('tenant-a', 'Pessoa Teste', 'funcionario@example.com', {}, client);
+
+    expect(result).toEqual({ reusedExistingAccount: true, invitationSent: false });
+  });
+
+  it('shows the Portuguese error returned by employee invitation handling', async () => {
+    const invoke = jest.fn().mockResolvedValue({ data: { error: 'Este e-mail já tem acesso a esta oficina.' }, error: null });
+    const client = { functions: { invoke } } as unknown as SupabaseClient;
+
+    await expect(inviteWorkshopEmployee('tenant-a', 'Pessoa Teste', 'funcionario@example.com', {}, client))
+      .rejects.toThrow('Este e-mail já tem acesso a esta oficina.');
+  });
+
   it('rejects a customer without a name before attempting a network request', async () => {
     await expect(saveCustomer('tenant-a', { ...validCustomer, full_name: ' ' }, undefined, noNetworkClient))
       .rejects.toThrow('Informe o nome completo do cliente.');
