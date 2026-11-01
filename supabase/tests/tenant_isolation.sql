@@ -69,8 +69,6 @@ insert into public.financial_entries(workshop_id,entry_type,description,category
  ('20000000-0000-4000-8000-000000000002','expense','Conta B','Utilidades',60,current_date,null,null);
 insert into public.service_order_technical_notes(workshop_id,service_order_id,category,body,is_recommendation) values
  ('20000000-0000-4000-8000-000000000001','60000000-0000-4000-8000-000000000001','Freios','Verificar após assentamento',true);
-insert into storage.objects(bucket_id,name) values
- ('service-order-photos','20000000-0000-4000-8000-000000000001/60000000-0000-4000-8000-000000000001/entrada.jpg');
 insert into public.service_order_attachments(workshop_id,service_order_id,storage_path,file_name,mime_type,size_bytes,caption,uploaded_by) values
  ('20000000-0000-4000-8000-000000000001','60000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000001/60000000-0000-4000-8000-000000000001/entrada.jpg','entrada.jpg','image/jpeg',1024,'Foto de entrada','10000000-0000-4000-8000-000000000001');
 
@@ -109,7 +107,7 @@ insert into pg_temp.rls_test_results values
   ('Owner cannot read another workshop customer', (select count(*) = 0 from public.customers where workshop_id = '20000000-0000-4000-8000-000000000002')),
   ('Owner sees only own workshop orders', (select count(*) = 1 from public.service_orders)),
   ('Owner sees seeded checklist and own technical notes', (select count(*)=25 from public.service_order_inspection_items where service_order_id='60000000-0000-4000-8000-000000000001') and (select count(*)=1 from public.service_order_technical_notes)),
-  ('Owner can read photo metadata and private storage objects from their own workshop', (select count(*)=1 from public.service_order_attachments) and (select count(*)=1 from storage.objects where bucket_id='service-order-photos')),
+  ('Owner can read photo metadata from their own workshop', (select count(*)=1 from public.service_order_attachments)),
   ('Owner only sees own estimates and their lines', (select count(*)=1 from public.estimates) and (select count(*)=1 from public.estimate_items)),
   ('Owner only sees own estimate history', (select count(*)=1 from public.estimate_events)),
   ('Owner only sees own supplier and purchase rows', (select count(*)=1 from public.suppliers) and (select count(*)=1 from public.purchases)),
@@ -136,7 +134,7 @@ insert into pg_temp.rls_test_results values
   ('Staff without finance permission reads no reversal history', (select count(*)=0 from public.financial_entry_reversals)),
   ('Staff without order permission reads no after-sales rows', (select count(*)=0 from public.maintenance_reminders) and (select count(*)=0 from public.service_warranties)),
   ('Staff without order permission reads no inspection data', (select count(*)=0 from public.service_order_inspection_items) and (select count(*)=0 from public.service_order_technical_notes)),
-  ('Staff without order permission reads no photo metadata or storage objects', (select count(*)=0 from public.service_order_attachments) and (select count(*)=0 from storage.objects where bucket_id='service-order-photos'));
+  ('Staff without order permission reads no photo metadata', (select count(*)=0 from public.service_order_attachments));
 
 reset role;
 update public.workshops

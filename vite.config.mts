@@ -11,8 +11,8 @@ export default defineConfig(({ mode }) => {
       extensions: ['.web.tsx', '.web.ts', '.web.jsx', '.web.js', '.tsx', '.ts', '.jsx', '.js', '.json'],
     },
     define: {
-      __VITE_SUPABASE_URL__: JSON.stringify(env.SUPABASE_URL ?? ''),
-      __VITE_SUPABASE_ANON_KEY__: JSON.stringify(env.SUPABASE_ANON_KEY ?? ''),
+      __VITE_SUPABASE_URL__: JSON.stringify(process.env.SUPABASE_URL ?? env.SUPABASE_URL ?? ''),
+      __VITE_SUPABASE_ANON_KEY__: JSON.stringify(process.env.SUPABASE_ANON_KEY ?? env.SUPABASE_ANON_KEY ?? ''),
       global: 'globalThis',
     },
     esbuild: { jsx: 'automatic' },

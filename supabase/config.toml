@@ -16,4 +16,4 @@ major_version = 15
 enabled = true
 enable_signup = false
 enable_anonymous_sign_ins = false
-additional_redirect_urls = ["oficina-inteligente://reset-password", "oficina-inteligente://invite"]
+additional_redirect_urls = ["oficina-inteligente://reset-password", "oficina-inteligente://invite", "https://joaokeven14.github.io/oficina-inteligente/**", "http://localhost:5173/**"]

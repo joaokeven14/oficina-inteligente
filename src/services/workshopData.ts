@@ -18,6 +18,13 @@ function clientOrDefault(client?: SupabaseClient): SupabaseClient {
   return client ?? getSupabaseClient();
 }
 
+async function invokePrivateFiles<T>(client: SupabaseClient, body: Record<string, unknown>): Promise<T> {
+  const { data, error } = await client.functions.invoke('manage-private-files', { body });
+  if (data && typeof data.error === 'string') throw new Error(data.error);
+  if (error) throw new Error('Não foi possível concluir a operação com o arquivo privado. Tente novamente.');
+  return data as T;
+}
+
 async function fetchAllPages<T>(fetchPage: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { code?: string; message: string } | null }>): Promise<T[]> {
   const pageSize = 500;
   const rows: T[] = [];
@@ -57,9 +64,9 @@ export async function getWorkshopSettings(workshopId: string, client?: SupabaseC
   if (error) throwFriendly(error);
   let logoUrl: string | null = null;
   if (data.logo_path) {
-    const { data: signed, error: signedError } = await supabase.storage.from('workshop-logos').createSignedUrl(data.logo_path, 3600);
-    if (signedError || !signed) throw new Error('Não foi possível abrir o logotipo privado da oficina.');
-    logoUrl = signed.signedUrl;
+    const signed = await invokePrivateFiles<{ signed_url: string | null }>(supabase, { action: 'sign_logo', kind: 'logo', workshop_id: workshopId });
+    if (!signed.signed_url) throw new Error('Não foi possível abrir o logotipo privado da oficina.');
+    logoUrl = signed.signed_url;
   }
   return { ...data, logo_url: logoUrl } as WorkshopSettings;
 }
@@ -72,15 +79,20 @@ export async function uploadWorkshopLogo(workshopId: string, file: Blob, fileNam
   const supabase = clientOrDefault(client);
   const { data: current, error: readError } = await supabase.from('workshops').select('logo_path').eq('id', workshopId).single();
   if (readError) throwFriendly(readError);
-  const storagePath = `${workshopId}/${Date.now().toString(36)}-${Math.random().toString(36).slice(2,10)}.${extension}`;
-  const { error: uploadError } = await supabase.storage.from('workshop-logos').upload(storagePath, file, { contentType: mimeType, upsert: false });
+  const prepared = await invokePrivateFiles<{ path: string; token: string }>(supabase, {
+    action: 'prepare_upload', kind: 'logo', workshop_id: workshopId, mime_type: mimeType, size_bytes: file.size,
+  });
+  const storagePath = prepared.path;
+  const { error: uploadError } = await supabase.storage.from('workshop-logos').uploadToSignedUrl(storagePath, prepared.token, file, { contentType: mimeType, upsert: false });
   if (uploadError) throwFriendly(uploadError);
   const { error: saveError } = await supabase.rpc('set_workshop_logo_path', { target_workshop: workshopId, target_path: storagePath });
   if (saveError) {
-    await supabase.storage.from('workshop-logos').remove([storagePath]);
+    await invokePrivateFiles(supabase, { action: 'remove_logo', kind: 'logo', workshop_id: workshopId, storage_path: storagePath }).catch(() => undefined);
     throwFriendly(saveError);
   }
-  if (current.logo_path && current.logo_path !== storagePath) await supabase.storage.from('workshop-logos').remove([current.logo_path]);
+  if (current.logo_path && current.logo_path !== storagePath) {
+    await invokePrivateFiles(supabase, { action: 'remove_logo', kind: 'logo', workshop_id: workshopId, storage_path: current.logo_path }).catch(() => undefined);
+  }
 }
 
 export async function removeWorkshopLogo(workshopId: string, client?: SupabaseClient): Promise<void> {
@@ -90,8 +102,7 @@ export async function removeWorkshopLogo(workshopId: string, client?: SupabaseCl
   const { error } = await supabase.rpc('set_workshop_logo_path', { target_workshop: workshopId, target_path: null });
   if (error) throwFriendly(error);
   if (current.logo_path) {
-    const { error: removeError } = await supabase.storage.from('workshop-logos').remove([current.logo_path]);
-    if (removeError) throwFriendly(removeError);
+    await invokePrivateFiles(supabase, { action: 'remove_logo', kind: 'logo', workshop_id: workshopId, storage_path: current.logo_path });
   }
 }
 
@@ -380,11 +391,18 @@ export async function listServiceOrderAttachments(workshopId: string, orderId: s
   const { data, error } = await supabase.from('service_order_attachments').select('*')
     .eq('workshop_id', workshopId).eq('service_order_id', orderId).order('created_at', { ascending: false });
   if (error) throwFriendly(error);
-  return Promise.all((data ?? []).map(async (row) => {
-    const { data: signed, error: signedError } = await supabase.storage.from('service-order-photos').createSignedUrl(row.storage_path, 3600);
-    if (signedError || !signed) throw new Error('Não foi possível abrir uma foto protegida desta OS.');
-    return { ...row, signed_url: signed.signedUrl } as ServiceOrderAttachment;
-  }));
+  const rows = data ?? [];
+  if (!rows.length) return [];
+  const signed = await invokePrivateFiles<{ attachments: Array<{ id: string; signed_url: string }> }>(supabase, {
+    action: 'sign_photos', kind: 'photo', workshop_id: workshopId, service_order_id: orderId,
+    attachment_ids: rows.map((row) => row.id),
+  });
+  const urls = new Map(signed.attachments.map((item) => [item.id, item.signed_url]));
+  return rows.map((row) => {
+    const signedUrl = urls.get(row.id);
+    if (!signedUrl) throw new Error('Não foi possível abrir uma foto protegida desta OS.');
+    return { ...row, signed_url: signedUrl } as ServiceOrderAttachment;
+  });
 }
 
 export async function uploadServiceOrderPhoto(
@@ -401,9 +419,13 @@ export async function uploadServiceOrderPhoto(
   if (!file.size || file.size > 10 * 1024 * 1024) throw new Error('A foto precisa ter até 10 MB.');
   if (caption.trim().length > 300) throw new Error('A legenda pode ter até 300 caracteres.');
   const extension = ({ 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/heic': 'heic', 'image/heif': 'heif' } as Record<string,string>)[mimeType];
-  const storagePath = `${workshopId}/${orderId}/${Date.now().toString(36)}-${Math.random().toString(36).slice(2,12)}.${extension}`;
   const supabase = clientOrDefault(client);
-  const { error: uploadError } = await supabase.storage.from('service-order-photos').upload(storagePath, file, { contentType: mimeType, upsert: false });
+  const prepared = await invokePrivateFiles<{ path: string; token: string }>(supabase, {
+    action: 'prepare_upload', kind: 'photo', workshop_id: workshopId, service_order_id: orderId,
+    mime_type: mimeType, size_bytes: file.size,
+  });
+  const storagePath = prepared.path;
+  const { error: uploadError } = await supabase.storage.from('service-order-photos').uploadToSignedUrl(storagePath, prepared.token, file, { contentType: mimeType, upsert: false });
   if (uploadError) throwFriendly(uploadError);
   const { error } = await supabase.from('service_order_attachments').insert({
     workshop_id: workshopId, service_order_id: orderId, storage_path: storagePath,
@@ -411,18 +433,17 @@ export async function uploadServiceOrderPhoto(
     size_bytes: file.size, caption: caption.trim(),
   });
   if (error) {
-    await supabase.storage.from('service-order-photos').remove([storagePath]);
+    await invokePrivateFiles(supabase, { action: 'remove_photo', kind: 'photo', workshop_id: workshopId, service_order_id: orderId, storage_path: storagePath }).catch(() => undefined);
     throwFriendly(error);
   }
 }
 
 export async function removeServiceOrderPhoto(workshopId: string, attachment: ServiceOrderAttachment, client?: SupabaseClient): Promise<void> {
   const supabase = clientOrDefault(client);
-  const { error: storageError } = await supabase.storage.from('service-order-photos').remove([attachment.storage_path]);
-  if (storageError) throwFriendly(storageError);
-  const { error } = await supabase.from('service_order_attachments').delete()
-    .eq('id', attachment.id).eq('workshop_id', workshopId).eq('storage_path', attachment.storage_path);
-  if (error) throwFriendly(error);
+  await invokePrivateFiles(supabase, {
+    action: 'remove_photo', kind: 'photo', workshop_id: workshopId,
+    service_order_id: attachment.service_order_id, storage_path: attachment.storage_path,
+  });
 }
 
 export const serviceOrderStatuses: { value: ServiceOrderStatus; label: string }[] = [

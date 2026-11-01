@@ -55,7 +55,7 @@ export function SignInScreen({ client, notice = '' }: ScreenProps & { notice?: s
     setBusy(true);
     try {
       const { error } = await client.auth.resetPasswordForEmail(email.trim(), {
-        redirectTo: passwordResetRedirect(Platform.OS, Platform.OS === 'web' ? window.location.origin : undefined),
+        redirectTo: passwordResetRedirect(Platform.OS, Platform.OS === 'web' ? window.location.href : undefined),
       });
       setMessage(error
         ? 'Não foi possível enviar as instruções. Tente novamente mais tarde.'

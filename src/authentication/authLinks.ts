@@ -25,5 +25,14 @@ export function withoutAuthTokens(value: string): string {
 }
 
 export function passwordResetRedirect(platform: string, webOrigin?: string): string {
-  return platform === 'web' && webOrigin ? `${webOrigin}/` : 'oficina-inteligente://reset-password';
+  if (platform !== 'web' || !webOrigin) return 'oficina-inteligente://reset-password';
+  try {
+    const url = new URL(webOrigin);
+    url.search = '';
+    url.hash = '';
+    if (!url.pathname.endsWith('/')) url.pathname += '/';
+    return url.toString();
+  } catch {
+    return 'oficina-inteligente://reset-password';
+  }
 }

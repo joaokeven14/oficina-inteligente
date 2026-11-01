@@ -10,8 +10,7 @@ const modules = ['dashboard', 'clients', 'vehicles', 'service_orders', 'estimate
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
 function invitationRedirectUrl() {
-  const configured = Deno.env.get('APP_WEB_URL');
-  if (!configured) return null;
+  const configured = Deno.env.get('APP_WEB_URL') ?? 'https://joaokeven14.github.io/oficina-inteligente/';
   try {
     const target = new URL(configured);
     if (target.protocol !== 'https:' || target.username || target.password) return null;

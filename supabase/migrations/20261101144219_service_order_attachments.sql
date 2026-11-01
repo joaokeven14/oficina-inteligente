@@ -1,8 +1,5 @@
--- Private photo storage is scoped to a workshop and one service order at both the
--- object-store and public metadata layers.
-insert into storage.buckets(id,name,public,file_size_limit,allowed_mime_types)
-values ('service-order-photos','service-order-photos',false,10485760,array['image/jpeg','image/png','image/webp','image/heic','image/heif'])
-on conflict (id) do nothing;
+-- The private object bucket is managed by the authenticated Edge Function because
+-- Supabase owns the Storage tables. The public metadata table remains tenant-scoped.
 
 create table public.service_order_attachments (
   id uuid primary key default gen_random_uuid(),
@@ -31,33 +28,6 @@ create policy service_order_attachments_create on public.service_order_attachmen
   ));
 create policy service_order_attachments_delete on public.service_order_attachments for delete to authenticated
   using (private.has_workshop_permission(workshop_id,'service_orders','update'));
-
-alter table storage.objects enable row level security;
-create policy service_order_photo_objects_read on storage.objects for select to authenticated using (
-  bucket_id='service-order-photos' and cardinality(storage.foldername(name))=2 and exists (
-    select 1 from public.service_orders o
-    where o.workshop_id::text=(storage.foldername(name))[1]
-      and o.id::text=(storage.foldername(name))[2]
-      and private.has_workshop_permission(o.workshop_id,'service_orders','view')
-  )
-);
-create policy service_order_photo_objects_create on storage.objects for insert to authenticated with check (
-  bucket_id='service-order-photos' and cardinality(storage.foldername(name))=2 and exists (
-    select 1 from public.service_orders o
-    where o.workshop_id::text=(storage.foldername(name))[1]
-      and o.id::text=(storage.foldername(name))[2]
-      and o.status<>'canceled'
-      and private.has_workshop_permission(o.workshop_id,'service_orders','update')
-  )
-);
-create policy service_order_photo_objects_delete on storage.objects for delete to authenticated using (
-  bucket_id='service-order-photos' and cardinality(storage.foldername(name))=2 and exists (
-    select 1 from public.service_orders o
-    where o.workshop_id::text=(storage.foldername(name))[1]
-      and o.id::text=(storage.foldername(name))[2]
-      and private.has_workshop_permission(o.workshop_id,'service_orders','update')
-  )
-);
 
 create function private.audit_service_order_attachment()
 returns trigger language plpgsql security definer set search_path = '' as $$

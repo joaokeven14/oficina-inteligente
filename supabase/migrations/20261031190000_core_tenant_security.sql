@@ -1,6 +1,7 @@
 -- Core identity, tenant isolation, and server-managed platform administration.
--- This migration is designed for Supabase PostgreSQL. It has not been applied
--- to any remote project.
+-- Initial tenant-security schema for Supabase PostgreSQL. This core schema was
+-- applied manually before migration tracking and is recorded as an applied
+-- baseline in the remote project's migration history.
 
 create table public.profiles (
   user_id uuid primary key references auth.users (id) on delete cascade,
