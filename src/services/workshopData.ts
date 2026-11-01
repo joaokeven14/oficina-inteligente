@@ -854,12 +854,16 @@ export async function getEmployeeProductivity(workshopId: string, from: string, 
   return (data ?? []) as EmployeeProductivity[];
 }
 
-export async function inviteWorkshopEmployee(workshopId: string, fullName: string, email: string, permissions: Record<string, ModulePermissions>, client?: SupabaseClient): Promise<void> {
+export async function inviteWorkshopEmployee(workshopId: string, fullName: string, email: string, permissions: Record<string, ModulePermissions>, client?: SupabaseClient): Promise<{ reusedExistingAccount: boolean; invitationSent: boolean }> {
   const { data, error } = await clientOrDefault(client).functions.invoke('manage-workshop', {
     body: { action: 'invite_employee', workshop_id: workshopId, full_name: fullName, email, permissions },
   });
   if (error) throw new Error(await edgeFunctionErrorMessage(error, 'Não foi possível enviar o convite ao funcionário. Tente novamente.'));
   if (data?.error) throw new Error(data.error);
+  return {
+    reusedExistingAccount: data?.reused_existing_account === true,
+    invitationSent: data?.invitation_sent === true,
+  };
 }
 
 export async function saveWorkshopEmployeePermissions(workshopId: string, employee: WorkshopEmployee, permissions: Record<string, ModulePermissions>, client?: SupabaseClient): Promise<void> {

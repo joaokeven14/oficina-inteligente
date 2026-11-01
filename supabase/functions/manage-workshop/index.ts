@@ -219,19 +219,55 @@ Deno.serve(async (request) => {
       const email = String(body.email ?? '').trim().toLowerCase();
       if (name.length < 2 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return json({ error: 'Informe o nome do funcionário e um e-mail válido.' }, 400);
       const { data: invite, error: inviteError } = await admin.auth.admin.inviteUserByEmail(email, { data: { full_name: name }, redirectTo: inviteRedirect });
-      if (inviteError || !invite.user) {
-        console.error('Falha ao enviar convite ao funcionário.', inviteError?.message ?? 'Resposta sem usuário.');
+      let employeeUserId = invite?.user?.id;
+      let reusedExistingAccount = false;
+      if (inviteError || !employeeUserId) {
         const alreadyRegistered = /already (been )?registered|user already exists/i.test(inviteError?.message ?? '');
-        return json({ error: alreadyRegistered
-          ? 'Este e-mail já está cadastrado. Use outro endereço para o funcionário.'
-          : inviteFailureMessage(inviteError?.message, 'funcionário') }, 400);
+        if (!alreadyRegistered) {
+          console.error('Falha ao enviar convite ao funcionário.', inviteError?.message ?? 'Resposta sem usuário.');
+          return json({ error: inviteFailureMessage(inviteError?.message, 'funcionário') }, 400);
+        }
+
+        const { user: existingUser, error: lookupError } = await findAuthUserByEmail(admin, email);
+        if (lookupError) {
+          console.error('Não foi possível localizar a conta existente do funcionário.', lookupError.message);
+          return json({ error: 'O e-mail já possui cadastro, mas não foi possível localizar a conta agora. Tente novamente.' }, 500);
+        }
+        if (!existingUser) return json({ error: 'Este e-mail já está cadastrado, mas a conta não foi localizada. Contate o suporte.' }, 409);
+
+        const { data: adminMembership, error: adminMembershipError } = await admin.from('platform_admins')
+          .select('active').eq('user_id', existingUser.id).maybeSingle();
+        if (adminMembershipError) {
+          console.error('Não foi possível verificar o tipo da conta existente.', adminMembershipError.message);
+          return json({ error: 'Não foi possível verificar a conta existente. Tente novamente.' }, 500);
+        }
+        if (adminMembership?.active) return json({ error: 'Este e-mail pertence a um administrador da plataforma e não pode ser usado como funcionário.' }, 400);
+
+        employeeUserId = existingUser.id;
+        reusedExistingAccount = true;
       }
-      const { data: newMembership, error: membershipError } = await admin.from('workshop_memberships')
-        .insert({ workshop_id: workshopId, user_id: invite.user.id, role: 'staff', status: 'active' }).select('id').single();
+      if (!employeeUserId) return json({ error: 'Não foi possível localizar a conta do funcionário. Tente novamente.' }, 500);
+
+      const { data: existingMembership, error: existingMembershipError } = await caller.from('workshop_memberships')
+        .select('id, role').eq('workshop_id', workshopId).eq('user_id', employeeUserId).maybeSingle();
+      if (existingMembershipError) {
+        console.error('Não foi possível verificar se o funcionário já tem acesso.', existingMembershipError.message);
+        return json({ error: 'Não foi possível verificar o acesso do funcionário. Atualize a página e tente novamente.' }, 500);
+      }
+      if (existingMembership) {
+        return json({ error: existingMembership.role === 'owner'
+          ? 'Este e-mail já é proprietário desta oficina.'
+          : 'Este e-mail já tem acesso a esta oficina.' }, 409);
+      }
+
+      // Use the authenticated owner's client so the explicit table grants and RLS policies apply.
+      const { data: newMembership, error: membershipError } = await caller.from('workshop_memberships')
+        .insert({ workshop_id: workshopId, user_id: employeeUserId, role: 'staff', status: 'active' }).select('id').single();
       if (membershipError || !newMembership) {
         console.error('Falha ao criar o vínculo do funcionário.', membershipError?.message ?? 'Vínculo não retornado.');
-        await admin.auth.admin.deleteUser(invite.user.id, true);
-        return json({ error: 'Não foi possível criar o acesso do funcionário. O convite não foi enviado.' }, 400);
+        return json({ error: reusedExistingAccount
+          ? 'Não foi possível vincular o acesso do funcionário. A conta existente foi preservada; tente novamente.'
+          : 'O convite foi enviado, mas não foi possível concluir o acesso do funcionário. A conta foi preservada; tente novamente.' }, 400);
       }
       const permissions = body.permissions && typeof body.permissions === 'object' ? body.permissions : {};
       const rows = modules.map((module) => {
@@ -239,14 +275,17 @@ Deno.serve(async (request) => {
         return { workshop_id: workshopId, membership_id: newMembership.id, module,
           can_view: p.view === true, can_create: p.create === true, can_update: p.update === true, can_delete: p.delete === true };
       });
-      const { error: permissionsError } = await admin.from('workshop_member_permissions').insert(rows);
+      const { error: permissionsError } = await caller.from('workshop_member_permissions').insert(rows);
       if (permissionsError) {
         console.error('Falha ao salvar as permissões do funcionário.', permissionsError.message);
-        await admin.from('workshop_memberships').delete().eq('id', newMembership.id).eq('workshop_id', workshopId);
-        await admin.auth.admin.deleteUser(invite.user.id, true);
-        return json({ error: 'Não foi possível salvar as permissões. O convite não foi enviado.' }, 400);
+        const { error: rollbackError } = await caller.from('workshop_memberships').delete()
+          .eq('id', newMembership.id).eq('workshop_id', workshopId);
+        if (rollbackError) console.error('Não foi possível desfazer o vínculo incompleto do funcionário.', rollbackError.message);
+        return json({ error: reusedExistingAccount
+          ? 'Não foi possível salvar as permissões. A conta foi preservada; tente novamente.'
+          : 'O convite foi enviado, mas não foi possível concluir as permissões. A conta foi preservada; tente novamente.' }, 400);
       }
-      return json({ membership_id: newMembership.id });
+      return json({ membership_id: newMembership.id, reused_existing_account: reusedExistingAccount, invitation_sent: !reusedExistingAccount });
     }
 
     return json({ error: 'Operação não reconhecida.' }, 400);

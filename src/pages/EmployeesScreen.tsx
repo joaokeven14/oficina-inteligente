@@ -50,9 +50,20 @@ export default function EmployeesScreen({ workshopId, isOwner }: { workshopId: s
   const save = async () => {
     setBusy(true); setError('');
     try {
+      let inviteResult: { reusedExistingAccount: boolean; invitationSent: boolean } | null = null;
       if (selected) await saveWorkshopEmployeePermissions(workshopId, selected, permissions);
-      else await inviteWorkshopEmployee(workshopId, fullName, email, permissions);
+      else inviteResult = await inviteWorkshopEmployee(workshopId, fullName, email, permissions);
       setModalOpen(false); await refresh();
+      if (inviteResult) {
+        Alert.alert(
+          inviteResult.invitationSent ? 'Convite enviado' : 'Acesso vinculado',
+          inviteResult.reusedExistingAccount
+            ? 'Este e-mail já tinha uma conta. Ela foi vinculada à oficina; o funcionário pode entrar com a senha atual.'
+            : inviteResult.invitationSent
+              ? 'O convite foi enviado ao funcionário. Ele deve abrir o e-mail para criar o acesso.'
+              : 'O acesso do funcionário foi vinculado à oficina.',
+        );
+      }
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Não foi possível salvar as permissões.'); }
     finally { setBusy(false); }
   };
