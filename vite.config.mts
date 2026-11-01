@@ -17,7 +17,8 @@ export default defineConfig(({ mode }) => {
     },
     esbuild: { jsx: 'automatic' },
     plugins: [VitePWA({
-      registerType: 'autoUpdate',
+      registerType: 'prompt',
+      injectRegister: false,
       includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
       manifest: {
         name: 'Oficina Inteligente',
