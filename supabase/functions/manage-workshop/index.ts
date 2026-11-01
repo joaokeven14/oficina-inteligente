@@ -8,6 +8,50 @@ const corsHeaders = {
 };
 const modules = ['dashboard', 'clients', 'vehicles', 'service_orders', 'estimates', 'inventory', 'finance', 'reports', 'employees', 'settings'];
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+const validId = (value: unknown) => typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+
+async function removeWorkshopFiles(admin: ReturnType<typeof createClient>, bucket: string, workshopId: string) {
+  const { data: bucketData, error: bucketError } = await admin.storage.getBucket(bucket);
+  if (bucketError) {
+    if (String(bucketError.statusCode) === '404' || /not found|does not exist|no such bucket/i.test(bucketError.message ?? '')) return;
+    throw bucketError;
+  }
+  if (!bucketData) return;
+
+  const storage = admin.storage.from(bucket);
+  const paths: string[] = [];
+  const visit = async (prefix: string) => {
+    for (let offset = 0; ; offset += 1000) {
+      const { data, error } = await storage.list(prefix, { limit: 1000, offset });
+      if (error) throw error;
+      const entries = data ?? [];
+      for (const entry of entries) {
+        if (!entry.name || entry.name === '.' || entry.name === '..') continue;
+        const path = `${prefix}/${entry.name}`;
+        if (entry.id) paths.push(path);
+        else await visit(path);
+      }
+      if (entries.length < 1000) break;
+    }
+  };
+  await visit(workshopId);
+  for (let index = 0; index < paths.length; index += 100) {
+    const { error } = await storage.remove(paths.slice(index, index + 100));
+    if (error) throw error;
+  }
+}
+
+async function cleanupWorkshopFiles(admin: ReturnType<typeof createClient>, workshopId: string) {
+  let failed = false;
+  for (const bucket of ['service-order-photos', 'workshop-logos']) {
+    try { await removeWorkshopFiles(admin, bucket, workshopId); }
+    catch (error) {
+      failed = true;
+      console.error('Falha ao remover arquivos privados da oficina.', bucket, error instanceof Error ? error.message : 'Falha desconhecida.');
+    }
+  }
+  return failed;
+}
 
 function invitationRedirectUrl() {
   const configured = Deno.env.get('APP_WEB_URL') ?? 'https://joaokeven14.github.io/oficina-inteligente/';
@@ -36,6 +80,34 @@ Deno.serve(async (request) => {
 
   try {
     const body = await request.json();
+    if (body.action === 'delete_workshop') {
+      const workshopId = body.workshop_id;
+      const confirmationName = String(body.confirmation_name ?? '').trim();
+      if (!validId(workshopId)) return json({ error: 'Oficina inválida.' }, 400);
+      const { data: platformAdmin, error: adminError } = await caller.from('platform_admins').select('active').eq('user_id', actorData.user.id).maybeSingle();
+      if (adminError) {
+        console.error('Não foi possível verificar o acesso de administrador.', adminError.message);
+        return json({ error: 'Não foi possível verificar seu acesso de administrador. Atualize a página e tente novamente.' }, 500);
+      }
+      if (!platformAdmin?.active) return json({ error: 'Sua conta não tem acesso de administrador da plataforma.' }, 403);
+      const { data: workshop, error: workshopError } = await admin.from('workshops').select('id,name').eq('id', workshopId).maybeSingle();
+      if (workshopError) {
+        console.error('Não foi possível consultar a oficina para exclusão.', workshopError.message);
+        return json({ error: 'Não foi possível consultar a oficina. Atualize a página e tente novamente.' }, 500);
+      }
+      if (!workshop) return json({ error: 'A oficina não foi encontrada. Atualize a lista e tente novamente.' }, 404);
+      if (confirmationName !== workshop.name) return json({ error: 'O nome digitado não corresponde à oficina.' }, 400);
+      const { error: deleteError } = await caller.rpc('admin_delete_workshop', { target_workshop_id: workshopId, confirmation_name: confirmationName });
+      if (deleteError) {
+        console.error('Falha ao excluir oficina.', deleteError.message);
+        if (deleteError.code === 'P0002') return json({ error: 'A oficina não foi encontrada. Atualize a lista e tente novamente.' }, 404);
+        if (deleteError.code === '22023') return json({ error: 'O nome digitado não corresponde à oficina.' }, 400);
+        return json({ error: 'Não foi possível excluir a oficina. Atualize a página e tente novamente.' }, 500);
+      }
+      const filesPending = await cleanupWorkshopFiles(admin, workshopId);
+      return json({ deleted: true, warning: filesPending ? 'A oficina foi excluída, mas alguns arquivos privados não puderam ser removidos. Contate o suporte.' : null });
+    }
+
     const inviteRedirect = invitationRedirectUrl();
     if (['create_workshop', 'invite_employee'].includes(body.action) && !inviteRedirect) {
       return json({ error: 'Os convites estão indisponíveis no momento. Contate o responsável pela plataforma.' }, 503);
