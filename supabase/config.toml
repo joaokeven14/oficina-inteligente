@@ -16,4 +16,57 @@ major_version = 15
 enabled = true
 enable_signup = false
 enable_anonymous_sign_ins = false
+site_url = "https://joaokeven14.github.io/oficina-inteligente/"
 additional_redirect_urls = ["oficina-inteligente://reset-password", "oficina-inteligente://invite", "https://joaokeven14.github.io/oficina-inteligente/**", "http://localhost:5173/**"]
+
+[auth.email.template.invite]
+subject = "Convite para acessar a Oficina Inteligente"
+content_path = "./supabase/templates/invite.html"
+
+[auth.email.template.confirmation]
+subject = "Confirme seu e-mail — Oficina Inteligente"
+content_path = "./supabase/templates/confirmation.html"
+
+[auth.email.template.recovery]
+subject = "Redefinição de senha — Oficina Inteligente"
+content_path = "./supabase/templates/recovery.html"
+
+[auth.email.template.magic_link]
+subject = "Seu link de acesso — Oficina Inteligente"
+content_path = "./supabase/templates/magic_link.html"
+
+[auth.email.template.email_change]
+subject = "Confirme seu novo e-mail — Oficina Inteligente"
+content_path = "./supabase/templates/email_change.html"
+
+[auth.email.template.reauthentication]
+subject = "{{ .Token }} é seu código de confirmação"
+content_path = "./supabase/templates/reauthentication.html"
+
+[auth.email.notification.password_changed]
+subject = "Senha alterada — Oficina Inteligente"
+content_path = "./supabase/templates/password_changed.html"
+
+[auth.email.notification.email_changed]
+subject = "E-mail alterado — Oficina Inteligente"
+content_path = "./supabase/templates/email_changed.html"
+
+[auth.email.notification.phone_changed]
+subject = "Telefone alterado — Oficina Inteligente"
+content_path = "./supabase/templates/phone_changed.html"
+
+[auth.email.notification.mfa_factor_enrolled]
+subject = "Novo método de verificação — Oficina Inteligente"
+content_path = "./supabase/templates/mfa_factor_enrolled.html"
+
+[auth.email.notification.mfa_factor_unenrolled]
+subject = "Método de verificação removido — Oficina Inteligente"
+content_path = "./supabase/templates/mfa_factor_unenrolled.html"
+
+[auth.email.notification.identity_linked]
+subject = "Método de acesso vinculado — Oficina Inteligente"
+content_path = "./supabase/templates/identity_linked.html"
+
+[auth.email.notification.identity_unlinked]
+subject = "Método de acesso removido — Oficina Inteligente"
+content_path = "./supabase/templates/identity_unlinked.html"

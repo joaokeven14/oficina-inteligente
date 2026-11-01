@@ -19,7 +19,7 @@ export default function ServiceOrderAttachmentsPanel({ workshopId, orderId, canM
   useEffect(() => { refresh(); }, [refresh]);
 
   const addPhoto = async () => {
-    if (Platform.OS === 'windows') { setError('Para enviar fotos no Windows, use a versão web instalada ou aberta no navegador.'); return; }
+    if (Platform.OS === 'windows') { setError('Para enviar fotos pelo aplicativo de computador, use a versão aberta no navegador.'); return; }
     setBusy(true); setError('');
     try {
       const response = await launchImageLibrary({ mediaType: 'photo', selectionLimit: 1, quality: 0.8, maxWidth: 1600, maxHeight: 1600, assetRepresentationMode: 'compatible' });
@@ -46,7 +46,7 @@ export default function ServiceOrderAttachmentsPanel({ workshopId, orderId, canM
     <Text style={styles.hint}>Fotos privadas da oficina, ligadas a esta OS e protegidas por permissões. Cada link de visualização expira após uma hora.</Text>
     {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
     {canManage ? <>
-      {Platform.OS === 'windows' ? <Text style={styles.hint}>Para adicionar fotos no Windows, abra a versão web/PWA; as fotos já salvas continuam visíveis aqui.</Text> : null}
+      {Platform.OS === 'windows' ? <Text style={styles.hint}>Para adicionar fotos pelo aplicativo de computador, abra a versão no navegador. As fotos já salvas continuam visíveis aqui.</Text> : null}
       <FormField label="Legenda (opcional)" value={caption} onChangeText={setCaption} placeholder="Ex.: Avaria no para-choque dianteiro" />
       <Pressable accessibilityRole="button" disabled={busy || Platform.OS === 'windows'} style={[styles.button, (busy || Platform.OS === 'windows') && styles.disabled]} onPress={() => { addPhoto().catch(() => undefined); }}><Text style={styles.buttonText}>{busy ? 'Salvando foto…' : 'Adicionar foto à OS'}</Text></Pressable>
       <Text style={styles.hint}>JPEG, PNG, WebP ou HEIC · máximo de 10 MB por foto.</Text>

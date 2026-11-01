@@ -32,7 +32,7 @@ function instructions(kind: BrowserKind): { title: string; steps: string[] } {
     steps: [
       'No Safari, toque em Compartilhar (quadrado com uma seta para cima). Em alguns layouts, essa opção fica dentro do menu da página.',
       'Escolha Adicionar à Tela de Início. Se a opção não aparecer, role a lista e procure em Editar Ações.',
-      'Se aparecer Abrir como App Web, deixe essa opção ativada. Toque em Adicionar.',
+      'Se aparecer a opção para abrir como aplicativo, deixe-a ativada. Toque em Adicionar.',
       'Abra Oficina Inteligente pelo novo ícone na tela inicial e entre com sua conta.',
     ],
   };
@@ -41,14 +41,14 @@ function instructions(kind: BrowserKind): { title: string; steps: string[] } {
     steps: [
       'Copie o endereço abaixo e abra-o no Safari do iPhone ou iPad.',
       'No Safari, abra Compartilhar e escolha Adicionar à Tela de Início.',
-      'Se aparecer Abrir como App Web, ative-a e toque em Adicionar. Depois, abra o aplicativo pelo ícone criado.',
+      'Se aparecer a opção para abrir como aplicativo, deixe-a ativada e toque em Adicionar. Depois, abra o aplicativo pelo ícone criado.',
     ],
   };
   if (kind === 'android') return {
     title: 'Instalar no Android',
     steps: [
       'Abra este endereço no Google Chrome.',
-      'No menu de três pontos do navegador, escolha Adicionar à tela inicial ou Instalar app.',
+      'No menu de três pontos do navegador, escolha Adicionar à tela inicial ou Instalar aplicativo.',
       'Confirme a instalação e abra Oficina Inteligente pelo ícone criado no aparelho.',
     ],
   };
@@ -64,7 +64,7 @@ function instructions(kind: BrowserKind): { title: string; steps: string[] } {
     title: 'Instalar no computador',
     steps: [
       'Clique no ícone Instalar à direita da barra de endereço, quando ele aparecer.',
-      'Como alternativa, abra o menu de três pontos do Chrome, depois Transmitir, salvar e compartilhar e Instalar esta página como um app.',
+      'Como alternativa, abra o menu de três pontos do Chrome, depois Transmitir, salvar e compartilhar e Instalar esta página como um aplicativo.',
       'Confirme a instalação. Depois, abra Oficina Inteligente pelo atalho ou pelo menu de aplicativos do computador.',
     ],
   };
@@ -80,7 +80,7 @@ function instructions(kind: BrowserKind): { title: string; steps: string[] } {
     title: 'Instalar Oficina Inteligente',
     steps: [
       'Abra este endereço no Google Chrome ou Microsoft Edge do computador, ou no Chrome do Android.',
-      'No menu do navegador, procure Instalar app ou Adicionar à tela inicial e confirme.',
+      'No menu do navegador, procure Instalar aplicativo ou Adicionar à tela inicial e confirme.',
       'No iPhone ou iPad, use o Safari e a opção Compartilhar, depois Adicionar à Tela de Início.',
     ],
   };
@@ -166,7 +166,7 @@ export default function InstallApp() {
           <span className="oi-install-caption" style={{ display: 'block', color: '#64758a', fontSize: 11 }}>Abra pelo ícone na tela inicial ou no computador.</span>
         </div>
         <button className="oi-install-button" type="button" disabled={prompting} onClick={() => { install(); }} style={{ ...button, color: '#fff', background: '#10243a', whiteSpace: 'nowrap' }}>
-          {prompting ? 'Aguarde…' : installPrompt ? 'Instalar app' : 'Como instalar'}
+          {prompting ? 'Aguarde…' : installPrompt ? 'Instalar aplicativo' : 'Como instalar'}
         </button>
       </div>
     </aside>

@@ -52,10 +52,10 @@ export default function WorkshopSettingsScreen({ workshopId, isOwner }: { worksh
       } else if (Platform.OS !== 'windows') {
         const response = await launchImageLibrary({ mediaType: 'photo', selectionLimit: 1, quality: 1, maxWidth: 1200, maxHeight: 1200, assetRepresentationMode: 'compatible' });
         if (response.didCancel) return;
-        if (response.errorCode) throw new Error(response.errorMessage ?? 'Não foi possível abrir a galeria.');
+        if (response.errorCode) throw new Error('Não foi possível acessar as fotos do aparelho. Tente novamente.');
         const asset = response.assets?.[0];
         if (asset?.uri) selected = { file: await (await fetch(asset.uri)).blob(), name: asset.fileName ?? 'logotipo', type: asset.type ?? '' };
-      } else throw new Error('No Windows, abra Configurações na versão web/PWA para enviar o logotipo.');
+      } else throw new Error('O envio do logotipo pelo aplicativo para computador não está disponível. Abra a versão no navegador e acesse Configurações da oficina.');
       if (!selected) return;
       await uploadWorkshopLogo(workshopId, selected.file, selected.name, selected.type.toLocaleLowerCase());
       await refresh(); setSaved(true);
@@ -83,7 +83,7 @@ export default function WorkshopSettingsScreen({ workshopId, isOwner }: { worksh
       <Text style={styles.fieldLabel}>Logotipo da oficina</Text>
       {settings.logo_url ? <Image source={{ uri: settings.logo_url }} resizeMode="contain" style={styles.logoPreview} /> : <Text style={styles.helper}>Nenhum logotipo cadastrado.</Text>}
       {isOwner ? <View style={styles.logoActions}><Pressable accessibilityRole="button" disabled={busy} style={[styles.logoButton, busy && styles.disabled]} onPress={() => { changeLogo().catch(() => undefined); }}><Text style={styles.buttonText}>{busy ? 'Enviando…' : 'Enviar ou trocar logotipo'}</Text></Pressable>{settings.logo_path ? <Pressable accessibilityRole="button" disabled={busy} style={[styles.removeLogoButton, busy && styles.disabled]} onPress={() => { deleteLogo().catch(() => undefined); }}><Text style={styles.removeLogoText}>Remover</Text></Pressable> : null}</View> : null}
-      <Text style={styles.helper}>JPEG, PNG ou WebP · até 5 MB · arquivos privados da oficina. O app Windows usa a versão web/PWA para enviar.</Text>
+      <Text style={styles.helper}>JPEG, PNG ou WebP · até 5 MB · arquivos privados da oficina. Para enviar o logotipo pelo aplicativo instalado no computador, use a versão no navegador.</Text>
       <FormField label="Nome da oficina" required value={settings.name} onChangeText={(value) => change('name', value)} />
       <FormField label="CNPJ" value={blank(settings.cnpj)} onChangeText={(value) => change('cnpj', value)} keyboardType="number-pad" />
       <FormField label="Responsável" value={blank(settings.responsible_name)} onChangeText={(value) => change('responsible_name', value)} />

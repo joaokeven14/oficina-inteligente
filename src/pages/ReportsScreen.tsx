@@ -135,7 +135,7 @@ export default function ReportsScreen({ workshopId, workshopName, isOwner }: { w
         const blob = new Blob([`\uFEFF${content}`], { type: 'text/csv;charset=utf-8' });
         const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = `relatorio-oficina-${from}-${to}.csv`; link.click(); URL.revokeObjectURL(link.href);
       } else if (Platform.OS !== 'windows') await Share.share({ title: 'Relatório Oficina Inteligente', message: content });
-      else setError('A exportação direta de CSV no Windows será habilitada quando o seletor nativo de arquivos for configurado.');
+      else setError('A exportação de planilhas pelo aplicativo de computador ainda não está disponível. Abra a versão no navegador para exportar o resumo.');
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Não foi possível exportar o relatório.'); }
     finally { setBusy(false); }
   };
