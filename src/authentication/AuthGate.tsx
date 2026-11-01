@@ -16,6 +16,7 @@ export default function AuthGate({ initialTab = 'Início' }: { initialTab?: 'In�
 
   useEffect(() => {
     let mounted = true;
+    let authEventObserved = false;
     const applyAuthUrl = async (value: string) => {
       const authUrl = parseAuthCallback(value);
       if (!authUrl) return false;
@@ -37,19 +38,23 @@ export default function AuthGate({ initialTab = 'Início' }: { initialTab?: 'In�
       const initialUrl = await Linking.getInitialURL().catch(() => null);
       if (initialUrl && await applyAuthUrl(initialUrl)) return;
       const { data, error } = await client.auth.getSession();
-      if (mounted) { setSession(error ? null : data.session); setLoading(false); }
+      if (!mounted) return;
+      if (!authEventObserved) setSession(data.session);
+      if (error && !data.session) setAuthError('Não foi possível verificar a sessão agora. Confira a conexão e tente novamente.');
+      setLoading(false);
     };
     initialize().catch(() => {
       if (mounted) {
-        setSession(null);
-        setPasswordMode(null);
+        if (!authEventObserved) setAuthError('Não foi possível verificar a sessão agora. Confira a conexão e tente novamente.');
         setLoading(false);
       }
     });
 
     const { data: { subscription } } = client.auth.onAuthStateChange((event, nextSession) => {
       if (!mounted) return;
+      authEventObserved = true;
       setSession(nextSession);
+      if (event === 'INITIAL_SESSION') setLoading(false);
       if (event === 'PASSWORD_RECOVERY') setPasswordMode('recovery');
       if (event === 'SIGNED_OUT') setPasswordMode(null);
     });

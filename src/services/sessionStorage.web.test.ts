@@ -1,9 +1,10 @@
 import { supabaseSessionStorage } from './sessionStorage.web';
 
 const values = new Map<string, string>();
+const setItemMock = jest.fn((key: string, value: string) => { values.set(key, value); });
 const localStorageMock = {
   getItem: jest.fn((key: string) => values.get(key) ?? null),
-  setItem: jest.fn((key: string, value: string) => { values.set(key, value); }),
+  setItem: setItemMock,
   removeItem: jest.fn((key: string) => { values.delete(key); }),
 } as unknown as Storage;
 
@@ -29,4 +30,10 @@ test('removes the saved session only when Supabase signs out', async () => {
   await supabaseSessionStorage.removeItem(key);
 
   expect(await supabaseSessionStorage.getItem(key)).toBeNull();
+});
+
+test('reports when browser storage is blocked instead of silently losing the session', async () => {
+  setItemMock.mockImplementation(() => { throw new Error('storage blocked'); });
+
+  await expect(supabaseSessionStorage.setItem('session-key', 'session-value')).rejects.toThrow('storage blocked');
 });
