@@ -54,13 +54,7 @@ async function cleanupWorkshopFiles(admin: ReturnType<typeof createClient>, work
 }
 
 function invitationRedirectUrl() {
-  const configured = Deno.env.get('APP_WEB_URL') ?? 'https://joaokeven14.github.io/oficina-inteligente/';
-  try {
-    const target = new URL(configured);
-    if (target.protocol !== 'https:' || target.username || target.password) return null;
-    target.search = ''; target.hash = '';
-    return target.href;
-  } catch { return null; }
+  return 'https://joaokeven14.github.io/oficina-inteligente/';
 }
 
 Deno.serve(async (request) => {
