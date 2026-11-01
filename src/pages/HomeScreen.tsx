@@ -180,7 +180,8 @@ export default function HomeScreen({ onSignOut, initialTab = 'Início' }: { onSi
 
 const tabIcons: Record<Tab, string> = { 'Início': 'IN', 'Clientes': 'CL', 'Veículos': 'VC', 'Ordens': 'OS', 'Estoque': 'ES', 'Compras': 'CP', 'Financeiro': 'FI', 'Orçamentos': 'OR', 'Pós-venda': 'PV', 'Funcionários': 'FU', 'Relatórios': 'RE', 'Configurações': 'CF', 'Admin': 'AD' };
 function NavigationItem({ tab, selected, onPress }: { tab: Tab; selected: boolean; onPress: () => void }) {
-  return <Pressable accessibilityRole="tab" accessibilityState={{ selected }} style={[styles.navigationItem, selected && styles.navigationItemActive]} onPress={onPress}><View style={[styles.navigationIcon, selected && styles.navigationIconActive]}><Text style={[styles.navigationIconText, selected && styles.navigationTextActive]}>{tabIcons[tab]}</Text></View><Text style={[styles.navigationText, selected && styles.navigationTextActive]}>{tab}</Text></Pressable>;
+  const label = tab === 'Admin' ? 'Administração' : tab;
+  return <Pressable accessibilityRole="tab" accessibilityLabel={tab === 'Admin' ? 'Administração da plataforma' : label} accessibilityState={{ selected }} style={[styles.navigationItem, selected && styles.navigationItemActive]} onPress={onPress}><View style={[styles.navigationIcon, selected && styles.navigationIconActive]}><Text style={[styles.navigationIconText, selected && styles.navigationTextActive]}>{tabIcons[tab]}</Text></View><Text style={[styles.navigationText, selected && styles.navigationTextActive]}>{label}</Text></Pressable>;
 }
 
 const styles = StyleSheet.create({

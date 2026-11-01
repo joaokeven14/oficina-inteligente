@@ -5,7 +5,8 @@ import SetupScreen from './src/pages/SetupScreen';
 import { isSupabaseConfigured } from './src/config/environment';
 
 export default function App() {
-  const initialTab = Platform.OS === 'web' && window.location.pathname.replace(/\/+$/, '') === '/admin' ? 'Admin' : 'Início';
+  const pagePath = Platform.OS === 'web' ? window.location.pathname.replace(/\/+$/, '') : '';
+  const initialTab = Platform.OS === 'web' && (pagePath === '/admin' || pagePath.endsWith('/admin')) ? 'Admin' : 'Início';
   return (
     <SafeAreaProvider>
       {isSupabaseConfigured() ? <AuthGate initialTab={initialTab} /> : <SetupScreen />}
