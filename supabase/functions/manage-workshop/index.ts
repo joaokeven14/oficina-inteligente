@@ -102,7 +102,7 @@ Deno.serve(async (request) => {
       }
       if (!workshop) return json({ error: 'A oficina não foi encontrada. Atualize a lista e tente novamente.' }, 404);
       if (confirmationName !== workshop.name) return json({ error: 'O nome digitado não corresponde à oficina.' }, 400);
-      const { error: deleteError } = await caller.rpc('admin_delete_workshop', { target_workshop_id: workshopId, confirmation_name: confirmationName });
+      const { data: cleanupBatchId, error: deleteError } = await caller.rpc('admin_delete_workshop', { target_workshop_id: workshopId, confirmation_name: confirmationName });
       if (deleteError) {
         console.error('Falha ao excluir oficina.', deleteError.message);
         if (deleteError.code === 'P0002') return json({ error: 'A oficina não foi encontrada. Atualize a lista e tente novamente.' }, 404);
@@ -110,7 +110,33 @@ Deno.serve(async (request) => {
         return json({ error: 'Não foi possível excluir a oficina. Atualize a página e tente novamente.' }, 500);
       }
       const filesPending = await cleanupWorkshopFiles(admin, workshopId);
-      return json({ deleted: true, warning: filesPending ? 'A oficina foi excluída, mas alguns arquivos privados não puderam ser removidos. Contate o suporte.' : null });
+      let accountCleanup: Record<string, unknown> | null = null;
+      let accountCleanupFailed = false;
+      if (validId(cleanupBatchId)) {
+        const { data, error: cleanupError } = await caller.rpc('admin_finalize_workshop_account_cleanup', { target_batch_id: cleanupBatchId });
+        if (cleanupError) {
+          accountCleanupFailed = true;
+          console.error('A oficina foi excluída, mas não foi possível liberar as contas sem vínculo.', cleanupError.message);
+        } else if (data && typeof data === 'object') {
+          accountCleanup = data as Record<string, unknown>;
+        } else {
+          accountCleanupFailed = true;
+          console.error('A oficina foi excluída, mas a limpeza das contas não retornou um resultado válido.');
+        }
+      } else {
+        accountCleanupFailed = true;
+        console.error('A oficina foi excluída, mas não foi possível identificar as contas para limpeza.');
+      }
+      const warnings = [];
+      if (filesPending) warnings.push('Alguns arquivos privados não puderam ser removidos. Contate o suporte.');
+      if (accountCleanupFailed) warnings.push('Não foi possível confirmar a liberação dos e-mails das contas sem vínculo. Contate o suporte.');
+      return json({
+        deleted: true,
+        releasedAccounts: typeof accountCleanup?.released_accounts === 'number' ? accountCleanup.released_accounts : null,
+        preservedLinkedAccounts: typeof accountCleanup?.preserved_linked_accounts === 'number' ? accountCleanup.preserved_linked_accounts : null,
+        preservedStorageAccounts: typeof accountCleanup?.preserved_storage_accounts === 'number' ? accountCleanup.preserved_storage_accounts : null,
+        warning: warnings.length ? warnings.join(' ') : null,
+      });
     }
 
     const inviteRedirect = invitationRedirectUrl();

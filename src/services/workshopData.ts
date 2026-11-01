@@ -779,13 +779,23 @@ export async function setPlatformWorkshopStatus(workshopId: string, status: 'act
   if (error) throwFriendly(error);
 }
 
-export async function deletePlatformWorkshop(workshopId: string, confirmationName: string, client?: SupabaseClient): Promise<{ warning: string | null }> {
+export async function deletePlatformWorkshop(workshopId: string, confirmationName: string, client?: SupabaseClient): Promise<{
+  warning: string | null;
+  releasedAccounts: number | null;
+  preservedLinkedAccounts: number | null;
+  preservedStorageAccounts: number | null;
+}> {
   const { data, error } = await clientOrDefault(client).functions.invoke('manage-workshop', {
     body: { action: 'delete_workshop', workshop_id: workshopId, confirmation_name: confirmationName },
   });
   if (error) throw new Error(await edgeFunctionErrorMessage(error, 'Não foi possível excluir a oficina. Tente novamente.'));
   if (data?.error) throw new Error(data.error);
-  return { warning: typeof data?.warning === 'string' ? data.warning : null };
+  return {
+    warning: typeof data?.warning === 'string' ? data.warning : null,
+    releasedAccounts: typeof data?.releasedAccounts === 'number' ? data.releasedAccounts : null,
+    preservedLinkedAccounts: typeof data?.preservedLinkedAccounts === 'number' ? data.preservedLinkedAccounts : null,
+    preservedStorageAccounts: typeof data?.preservedStorageAccounts === 'number' ? data.preservedStorageAccounts : null,
+  };
 }
 
 export async function createPlatformWorkshop(workshopName: string, ownerName: string, ownerEmail: string, client?: SupabaseClient): Promise<string> {

@@ -61,7 +61,18 @@ export default function PlatformAdminScreen() {
       setWorkshopToDelete(null); setDeleteConfirmation('');
       setWorkshops((current) => current.filter((workshop) => workshop.id !== deletedId));
       await refresh();
-      Alert.alert('Oficina excluída', result.warning ?? `A oficina “${deletedName}” e os dados vinculados foram excluídos. As contas dos usuários foram mantidas.`);
+      const details = [`A oficina “${deletedName}” e os dados vinculados foram excluídos.`];
+      if (result.releasedAccounts !== null) {
+        if (result.releasedAccounts > 0) details.push(`Os e-mails de ${result.releasedAccounts} conta(s) sem vínculo com outras oficinas foram liberados para reutilização.`);
+        else if ((result.preservedLinkedAccounts ?? 0) > 0 || (result.preservedStorageAccounts ?? 0) > 0) details.push('Nenhum e-mail foi liberado nesta exclusão.');
+        else details.push('Não havia contas vinculadas que precisassem ser liberadas.');
+        if ((result.preservedLinkedAccounts ?? 0) > 0) details.push(`${result.preservedLinkedAccounts} conta(s) foram mantidas por ainda estarem vinculadas a outra oficina ou à administração da plataforma.`);
+        if ((result.preservedStorageAccounts ?? 0) > 0) details.push(`${result.preservedStorageAccounts} conta(s) foram mantidas porque ainda possuem arquivos armazenados.`);
+      } else {
+        details.push('Não foi possível confirmar se os e-mails das contas sem vínculo foram liberados.');
+      }
+      if (result.warning) details.push(result.warning);
+      Alert.alert('Oficina excluída', details.join(' '));
     } catch (reason) {
       setDeleteError(reason instanceof Error ? reason.message : 'Não foi possível excluir a oficina. Tente novamente.');
     } finally { setBusy(false); }
@@ -93,7 +104,7 @@ export default function PlatformAdminScreen() {
       <View style={styles.modalBackdrop}><View style={styles.modalCard}>
         <Text style={styles.modalTitle}>Excluir oficina definitivamente?</Text>
         <Text style={styles.modalText}>Esta ação apaga permanentemente a oficina, os clientes, veículos, ordens de serviço, orçamentos, estoque, compras, dados financeiros, fotos, logotipo e vínculos dos funcionários.</Text>
-        <Text style={styles.modalText}>As contas dos usuários serão mantidas. Os registros de auditoria serão preservados sem vínculo com a oficina; vínculos desses usuários com outras oficinas não serão afetados.</Text>
+        <Text style={styles.modalText}>As contas ligadas somente a esta oficina serão removidas para liberar seus e-mails para uso futuro. Contas ainda vinculadas a outras oficinas ou à administração serão mantidas. Contas que ainda possuam arquivos armazenados também serão preservadas. Os registros de auditoria serão mantidos sem vínculo com a oficina.</Text>
         <Text style={styles.modalLabel}>Digite o nome da oficina para confirmar: {workshopToDelete?.name}</Text>
         <TextInput accessibilityLabel="Digite o nome da oficina para confirmar a exclusão" value={deleteConfirmation} onChangeText={setDeleteConfirmation} autoCapitalize="sentences" autoCorrect={false} editable={!busy} style={styles.confirmationInput} />
         {deleteError ? <Text accessibilityRole="alert" style={styles.error}>{deleteError}</Text> : null}
