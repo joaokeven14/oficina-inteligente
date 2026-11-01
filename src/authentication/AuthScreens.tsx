@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, TextInput, View } from 'react-native';
+import { KeyboardAvoidingView, Linking, Platform, Pressable, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, TextInput, View } from 'react-native';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { passwordResetRedirect } from './authLinks';
 import type { PasswordSetupMode } from './authLinks';
 
 type ScreenProps = { client: SupabaseClient };
+const privacyPolicyUrl = 'https://joaokeven14.github.io/oficina-inteligente/politica-de-privacidade.html';
 
 function AuthFrame({ children }: { children: React.ReactNode }) {
   return (
@@ -17,6 +18,9 @@ function AuthFrame({ children }: { children: React.ReactNode }) {
             <Text style={styles.eyebrow}>GESTÃO PARA OFICINAS</Text>
             <Text style={styles.brandName}>Oficina Inteligente</Text>
             {children}
+            <Pressable accessibilityRole="link" style={styles.privacyLink} onPress={() => { void Linking.openURL(privacyPolicyUrl); }}>
+              <Text style={styles.privacyText}>Política de privacidade</Text>
+            </Pressable>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -150,5 +154,7 @@ const styles = StyleSheet.create({
   linkButton: { alignSelf: 'center', padding: 13 },
   linkText: { color: '#315a80', fontSize: 13, fontWeight: '700' },
   noSignup: { marginTop: 8, color: '#7a899a', textAlign: 'center', fontSize: 11, lineHeight: 17 },
+  privacyLink: { alignSelf: 'center', marginTop: 14, padding: 8 },
+  privacyText: { color: '#315a80', fontSize: 12, fontWeight: '700', textDecorationLine: 'underline' },
 });
 
