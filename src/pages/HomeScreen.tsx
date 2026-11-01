@@ -41,6 +41,7 @@ export default function HomeScreen({ onSignOut, initialTab = 'Início' }: { onSi
         setPlatformAdmin(isAdmin);
         setWorkshops(contexts);
         setWorkshop(contexts[0] ?? null);
+        if (isAdmin && contexts.length === 0) setActiveTab('Admin');
       })
       .catch((reason: unknown) => { if (active) setLoadError(reason instanceof Error ? reason.message : 'Não foi possível carregar a oficina.'); })
       .finally(() => { if (active) setLoading(false); });
