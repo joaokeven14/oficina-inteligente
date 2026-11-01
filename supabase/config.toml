@@ -1,0 +1,19 @@
+project_id = "oficina-inteligente"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+shadow_port = 54320
+major_version = 15
+
+[auth]
+enabled = true
+enable_signup = false
+enable_anonymous_sign_ins = false
+additional_redirect_urls = ["oficina-inteligente://reset-password", "oficina-inteligente://invite"]

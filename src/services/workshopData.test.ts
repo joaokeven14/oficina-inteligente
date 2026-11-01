@@ -1,0 +1,94 @@
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { listCustomers, reverseFinancialEntry, saveCustomer, saveVehicle, uploadServiceOrderPhoto, uploadWorkshopLogo } from './workshopData';
+import type { CustomerInput, VehicleInput } from '../types/workshop';
+
+const noNetworkClient = {} as SupabaseClient;
+
+const validCustomer: CustomerInput = {
+  full_name: 'Cliente de teste', document: null, phone: null, whatsapp: null,
+  email: null, address: null, city: null, state: null, notes: null,
+};
+
+const validVehicle: VehicleInput = {
+  customer_id: '00000000-0000-4000-8000-000000000001', make: 'Ford', model: 'Ka',
+  year_manufacture: 2020, model_year: 2021, plate: 'ABC1D23', color: null,
+  mileage_km: null, fuel: 'flex', chassis: null, notes: null,
+};
+
+describe('workshop data validation', () => {
+  it('rejects a customer without a name before attempting a network request', async () => {
+    await expect(saveCustomer('tenant-a', { ...validCustomer, full_name: ' ' }, undefined, noNetworkClient))
+      .rejects.toThrow('Informe o nome completo do cliente.');
+  });
+
+  it('rejects a document with an invalid CPF/CNPJ digit count', async () => {
+    await expect(saveCustomer('tenant-a', { ...validCustomer, document: '123.456' }, undefined, noNetworkClient))
+      .rejects.toThrow('CPF deve ter 11 dígitos e CNPJ deve ter 14.');
+  });
+
+  it('accepts a CPF digit count and lets PostgreSQL enforce duplicate prevention', async () => {
+    const insert = jest.fn().mockResolvedValue({ error: null });
+    const client = { from: jest.fn(() => ({ insert })) } as unknown as SupabaseClient;
+    await saveCustomer('tenant-a', { ...validCustomer, document: '123.456.789-00' }, undefined, client);
+    expect(insert).toHaveBeenCalledWith(expect.objectContaining({ workshop_id: 'tenant-a', document: '123.456.789-00' }));
+  });
+
+  it('rejects a vehicle without a customer link', async () => {
+    await expect(saveVehicle('tenant-a', { ...validVehicle, customer_id: '' }, undefined, noNetworkClient))
+      .rejects.toThrow('Selecione o cliente responsável pelo veículo.');
+  });
+
+  it('requires a reason and sends reversals through the permission-checked database RPC', async () => {
+    const rpc = jest.fn().mockResolvedValue({ error: null });
+    const client = { rpc } as unknown as SupabaseClient;
+    await expect(reverseFinancialEntry('tenant-a', 'entry-a', '  ', client)).rejects.toThrow('Informe o motivo do estorno');
+    await reverseFinancialEntry('tenant-a', 'entry-a', ' Correção do lançamento ', client);
+    expect(rpc).toHaveBeenCalledWith('reverse_financial_entry', { target_workshop: 'tenant-a', target_entry: 'entry-a', reversal_reason: 'Correção do lançamento' });
+  });
+
+  it('rejects a plate with a length outside the Brazilian seven-character format', async () => {
+    await expect(saveVehicle('tenant-a', { ...validVehicle, plate: 'ABC123' }, undefined, noNetworkClient))
+      .rejects.toThrow('Informe uma placa válida com 7 caracteres.');
+  });
+
+  it('rejects unsupported image types and files larger than the private upload limit', async () => {
+    await expect(uploadServiceOrderPhoto('tenant-a','order-a',new Blob(['x']),'photo.gif','image/gif','',noNetworkClient))
+      .rejects.toThrow('Use uma foto JPEG, PNG, WebP ou HEIC.');
+    const oversized = new Blob([new Uint8Array(10 * 1024 * 1024 + 1)]);
+    await expect(uploadServiceOrderPhoto('tenant-a','order-a',oversized,'photo.jpg','image/jpeg','',noNetworkClient))
+      .rejects.toThrow('A foto precisa ter até 10 MB.');
+  });
+
+  it('validates logo type and size before accessing Supabase', async () => {
+    await expect(uploadWorkshopLogo('tenant-a', new Blob(['x']), 'logo.gif', 'image/gif', noNetworkClient))
+      .rejects.toThrow('Use um logotipo JPEG, PNG ou WebP.');
+    const oversized = new Blob([new Uint8Array(5 * 1024 * 1024 + 1)]);
+    await expect(uploadWorkshopLogo('tenant-a', oversized, 'logo.png', 'image/png', noNetworkClient))
+      .rejects.toThrow('O logotipo precisa ter até 5 MB.');
+  });
+
+  it('loads customer records beyond the first PostgREST page', async () => {
+    const firstPage = Array.from({ length: 500 }, (_, index) => ({ id: `customer-${index}`, full_name: `Customer ${index}` }));
+    const range = jest.fn(async (from: number) => ({ data: from === 0 ? firstPage : [{ id: 'customer-500', full_name: 'Customer 500' }], error: null }));
+    const query: { order: jest.Mock; range: typeof range } = { order: jest.fn(), range };
+    query.order.mockReturnValue(query);
+    const is = jest.fn(() => query); const eq = jest.fn(() => ({ is }));
+    const select = jest.fn(() => ({ eq })); const client = { from: jest.fn(() => ({ select })) } as unknown as SupabaseClient;
+    const rows = await listCustomers('tenant-a', client);
+    expect(rows).toHaveLength(501);
+    expect(range).toHaveBeenNthCalledWith(1, 0, 499);
+    expect(range).toHaveBeenNthCalledWith(2, 500, 999);
+  });
+
+  it('removes an uploaded object if the attachment metadata insert fails', async () => {
+    const upload = jest.fn().mockResolvedValue({ error: null });
+    const remove = jest.fn().mockResolvedValue({ error: null });
+    const storage = { from: jest.fn(() => ({ upload, remove })) };
+    const insert = jest.fn().mockResolvedValue({ error: { code: '42501', message: 'denied' } });
+    const client = { storage, from: jest.fn(() => ({ insert })) } as unknown as SupabaseClient;
+    await expect(uploadServiceOrderPhoto('tenant-a','order-a',new Blob(['image']),'photo.jpg','image/jpeg','front',client))
+      .rejects.toThrow('Seu usuário não tem permissão para essa operação.');
+    expect(upload).toHaveBeenCalledWith(expect.stringMatching(/^tenant-a\/order-a\//), expect.any(Blob), expect.objectContaining({ contentType: 'image/jpeg', upsert: false }));
+    expect(remove).toHaveBeenCalledWith([upload.mock.calls[0][0]]);
+  });
+});

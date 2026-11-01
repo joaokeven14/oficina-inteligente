@@ -1,0 +1,7 @@
+work/
+outputs/
+android/
+ios/
+windows/
+supabase/functions/
+dist/

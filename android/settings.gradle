@@ -1,0 +1,10 @@
+pluginManagement { includeBuild("../node_modules/@react-native/gradle-plugin") }
+plugins { id("com.facebook.react.settings") }
+extensions.configure(com.facebook.react.ReactSettingsExtension) { ex ->
+    // Use the checked-in React Native CLI entry directly; pnpm installs do not
+    // guarantee that npx is available to Gradle's child process on Windows.
+    ex.autolinkLibrariesFromCommand(["node", "node_modules/react-native/cli.js", "config"])
+}
+rootProject.name = 'OficinaInteligente'
+include ':app'
+includeBuild('../node_modules/@react-native/gradle-plugin')
