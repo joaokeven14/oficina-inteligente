@@ -57,6 +57,17 @@ function invitationRedirectUrl() {
   return 'https://joaokeven14.github.io/oficina-inteligente/';
 }
 
+function inviteFailureMessage(errorMessage: string | undefined, recipient: 'proprietário' | 'funcionário') {
+  const normalized = (errorMessage ?? '').toLowerCase();
+  if (normalized.includes('email address not authorized') || normalized.includes('email address is not authorized')) {
+    return 'O envio de teste do Supabase só permite enviar e-mails para endereços autorizados da equipe do projeto. Para convidar outros endereços, configure um serviço de envio de e-mail (SMTP) nas configurações de autenticação.';
+  }
+  if (/rate.?limit|too many requests|email rate limit/.test(normalized)) {
+    return 'O limite de envio de e-mails foi atingido. Aguarde alguns minutos e tente novamente.';
+  }
+  return `Não foi possível enviar o convite ao ${recipient}. Confira o e-mail e tente novamente.`;
+}
+
 Deno.serve(async (request) => {
   if (request.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
   if (request.method !== 'POST') return json({ error: 'Método de solicitação não permitido.' }, 405);
@@ -123,7 +134,7 @@ Deno.serve(async (request) => {
         const alreadyRegistered = /already (been )?registered|user already exists/i.test(inviteError?.message ?? '');
         return json({ error: alreadyRegistered
           ? 'Este e-mail já está cadastrado. Use outro endereço para o proprietário.'
-          : 'Não foi possível enviar o convite ao proprietário. Confira o e-mail e tente novamente.' }, 400);
+          : inviteFailureMessage(inviteError?.message, 'proprietário') }, 400);
       }
       const { data: workshopId, error: createError } = await caller.rpc('admin_create_workshop', { workshop_name: workshopName, owner_user_id: invite.user.id });
       if (createError) {
@@ -154,7 +165,7 @@ Deno.serve(async (request) => {
         const alreadyRegistered = /already (been )?registered|user already exists/i.test(inviteError?.message ?? '');
         return json({ error: alreadyRegistered
           ? 'Este e-mail já está cadastrado. Use outro endereço para o funcionário.'
-          : 'Não foi possível enviar o convite ao funcionário. Confira o e-mail e tente novamente.' }, 400);
+          : inviteFailureMessage(inviteError?.message, 'funcionário') }, 400);
       }
       const { data: newMembership, error: membershipError } = await admin.from('workshop_memberships')
         .insert({ workshop_id: workshopId, user_id: invite.user.id, role: 'staff', status: 'active' }).select('id').single();
