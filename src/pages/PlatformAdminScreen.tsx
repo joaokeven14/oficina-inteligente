@@ -31,9 +31,13 @@ export default function PlatformAdminScreen() {
   const create = async () => {
     setBusy(true); setError('');
     try {
-      await createPlatformWorkshop(workshopName, ownerName, ownerEmail);
+      const result = await createPlatformWorkshop(workshopName, ownerName, ownerEmail);
       setWorkshopName(''); setOwnerName(''); setOwnerEmail(''); await refresh();
-      Alert.alert('Convite enviado', 'A oficina foi criada e o convite do proprietário foi enviado por e-mail.');
+      if (result.reusedExistingAccount) {
+        Alert.alert('Oficina criada', 'Este e-mail já tinha cadastro. A oficina foi vinculada à conta existente; o proprietário deve entrar com a senha atual ou solicitar a recuperação de senha. Não foi enviado um novo convite.');
+      } else {
+        Alert.alert('Convite enviado', 'A oficina foi criada e o convite do proprietário foi enviado por e-mail.');
+      }
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Não foi possível criar a oficina.'); }
     finally { setBusy(false); }
   };
@@ -88,7 +92,7 @@ export default function PlatformAdminScreen() {
         <FormField label="Nome do proprietário" required value={ownerName} onChangeText={setOwnerName} />
         <FormField label="E-mail do proprietário" required value={ownerEmail} onChangeText={setOwnerEmail} keyboardType="email-address" />
         <Pressable disabled={busy || !workshopName.trim() || !ownerName.trim() || !ownerEmail.trim()} style={[styles.primary, busy && styles.disabled]} onPress={() => { create(); }}><Text style={styles.primaryText}>{busy ? 'Criando…' : 'Criar e enviar convite'}</Text></Pressable>
-        <Text style={styles.note}>O serviço seguro envia o convite e cria o vínculo proprietário. Chave administrativa não fica no aplicativo.</Text>
+        <Text style={styles.note}>Se o e-mail já tiver uma conta, a oficina será vinculada ao cadastro existente. Nesse caso, não será enviado outro convite e o proprietário usará a senha atual.</Text>
       </View>
       <FormField label="Pesquisar oficinas ou proprietários" value={query} onChangeText={setQuery} placeholder="Oficina, proprietário ou e-mail de login" />
       {loading ? <ActivityIndicator style={styles.loading} color="#e97824" /> : visible.map((workshop) => <View key={workshop.id} style={styles.card}>

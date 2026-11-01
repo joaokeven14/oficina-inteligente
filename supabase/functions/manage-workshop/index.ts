@@ -68,6 +68,17 @@ function inviteFailureMessage(errorMessage: string | undefined, recipient: 'prop
   return `Não foi possível enviar o convite ao ${recipient}. Confira o e-mail e tente novamente.`;
 }
 
+async function findAuthUserByEmail(admin: ReturnType<typeof createClient>, email: string) {
+  const perPage = 1000;
+  for (let page = 1; ; page += 1) {
+    const { data, error } = await admin.auth.admin.listUsers({ page, perPage });
+    if (error) return { user: null, error };
+    const user = data.users.find((candidate) => candidate.email?.toLowerCase() === email);
+    if (user) return { user, error: null };
+    if (data.users.length < perPage) return { user: null, error: null };
+  }
+}
+
 Deno.serve(async (request) => {
   if (request.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
   if (request.method !== 'POST') return json({ error: 'Método de solicitação não permitido.' }, 405);
@@ -155,20 +166,42 @@ Deno.serve(async (request) => {
       const ownerEmail = String(body.owner_email ?? '').trim().toLowerCase();
       if (workshopName.length < 2 || ownerName.length < 2 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(ownerEmail)) return json({ error: 'Informe o nome da oficina, o nome do proprietário e um e-mail válido.' }, 400);
       const { data: invite, error: inviteError } = await admin.auth.admin.inviteUserByEmail(ownerEmail, { data: { full_name: ownerName }, redirectTo: inviteRedirect });
-      if (inviteError || !invite.user) {
-        console.error('Falha ao enviar convite ao proprietário.', inviteError?.message ?? 'Resposta sem usuário.');
+      let ownerUserId = invite?.user?.id;
+      let reusedExistingAccount = false;
+      if (inviteError || !ownerUserId) {
         const alreadyRegistered = /already (been )?registered|user already exists/i.test(inviteError?.message ?? '');
-        return json({ error: alreadyRegistered
-          ? 'Este e-mail já está cadastrado. Use outro endereço para o proprietário.'
-          : inviteFailureMessage(inviteError?.message, 'proprietário') }, 400);
+        if (!alreadyRegistered) {
+          console.error('Falha ao enviar convite ao proprietário.', inviteError?.message ?? 'Resposta sem usuário.');
+          return json({ error: inviteFailureMessage(inviteError?.message, 'proprietário') }, 400);
+        }
+
+        const { user: existingUser, error: lookupError } = await findAuthUserByEmail(admin, ownerEmail);
+        if (lookupError) {
+          console.error('Não foi possível localizar a conta existente do proprietário.', lookupError.message);
+          return json({ error: 'O e-mail já possui cadastro, mas não foi possível localizar a conta agora. Tente novamente.' }, 500);
+        }
+        if (!existingUser) return json({ error: 'Este e-mail já está cadastrado, mas a conta não foi localizada. Contate o suporte.' }, 409);
+
+        const { data: adminMembership, error: membershipError } = await admin.from('platform_admins')
+          .select('active').eq('user_id', existingUser.id).maybeSingle();
+        if (membershipError) {
+          console.error('Não foi possível verificar o tipo da conta existente.', membershipError.message);
+          return json({ error: 'Não foi possível verificar a conta existente. Tente novamente.' }, 500);
+        }
+        if (adminMembership?.active) return json({ error: 'Este e-mail pertence a um administrador da plataforma e não pode ser usado como proprietário.' }, 400);
+
+        ownerUserId = existingUser.id;
+        reusedExistingAccount = true;
       }
-      const { data: workshopId, error: createError } = await caller.rpc('admin_create_workshop', { workshop_name: workshopName, owner_user_id: invite.user.id });
+      const { data: workshopId, error: createError } = await caller.rpc('admin_create_workshop', { workshop_name: workshopName, owner_user_id: ownerUserId });
       if (createError) {
-        console.error('Falha ao criar oficina; convite revogado.', createError.message);
-        await admin.auth.admin.deleteUser(invite.user.id, true);
-        return json({ error: 'Não foi possível criar a oficina. O convite não foi enviado.' }, 400);
+        console.error('Falha ao criar oficina para o proprietário.', createError.message);
+        if (!reusedExistingAccount && ownerUserId) await admin.auth.admin.deleteUser(ownerUserId, true);
+        return json({ error: reusedExistingAccount
+          ? 'Não foi possível vincular a conta existente à oficina. Nenhum cadastro foi apagado.'
+          : 'Não foi possível criar a oficina. O convite não foi enviado.' }, 400);
       }
-      return json({ workshop_id: workshopId });
+      return json({ workshop_id: workshopId, reused_existing_account: reusedExistingAccount });
     }
 
     if (body.action === 'invite_employee') {

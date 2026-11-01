@@ -798,13 +798,19 @@ export async function deletePlatformWorkshop(workshopId: string, confirmationNam
   };
 }
 
-export async function createPlatformWorkshop(workshopName: string, ownerName: string, ownerEmail: string, client?: SupabaseClient): Promise<string> {
+export async function createPlatformWorkshop(workshopName: string, ownerName: string, ownerEmail: string, client?: SupabaseClient): Promise<{
+  workshopId: string;
+  reusedExistingAccount: boolean;
+}> {
   const { data, error } = await clientOrDefault(client).functions.invoke('manage-workshop', {
     body: { action: 'create_workshop', workshop_name: workshopName, owner_name: ownerName, owner_email: ownerEmail },
   });
   if (error) throw new Error(await edgeFunctionErrorMessage(error, 'Não foi possível criar a oficina. Tente novamente.'));
   if (data?.error) throw new Error(data.error);
-  return data.workshop_id as string;
+  return {
+    workshopId: data.workshop_id as string,
+    reusedExistingAccount: data.reused_existing_account === true,
+  };
 }
 
 export async function listWorkshopEmployees(workshopId: string, client?: SupabaseClient): Promise<WorkshopEmployee[]> {
