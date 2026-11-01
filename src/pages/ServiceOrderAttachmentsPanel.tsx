@@ -24,7 +24,7 @@ export default function ServiceOrderAttachmentsPanel({ workshopId, orderId, canM
     try {
       const response = await launchImageLibrary({ mediaType: 'photo', selectionLimit: 1, quality: 0.8, maxWidth: 1600, maxHeight: 1600, assetRepresentationMode: 'compatible' });
       if (response.didCancel) return;
-      if (response.errorCode) throw new Error(response.errorMessage ?? 'Não foi possível abrir a galeria de fotos.');
+      if (response.errorCode) throw new Error('Não foi possível abrir a galeria de fotos. Tente novamente.');
       const asset = response.assets?.[0];
       if (!asset?.uri) throw new Error('Não foi possível ler a foto selecionada.');
       const mimeType = asset.type?.toLocaleLowerCase() ?? '';

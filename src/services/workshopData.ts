@@ -18,6 +18,17 @@ function clientOrDefault(client?: SupabaseClient): SupabaseClient {
   return client ?? getSupabaseClient();
 }
 
+async function edgeFunctionErrorMessage(error: unknown, fallback: string): Promise<string> {
+  const response = (error as { context?: Response } | null)?.context;
+  if (response && typeof response.clone === 'function') {
+    try {
+      const body = await response.clone().json();
+      if (body && typeof body.error === 'string') return body.error;
+    } catch { /* Use the Portuguese fallback when the response has no JSON message. */ }
+  }
+  return fallback;
+}
+
 async function invokePrivateFiles<T>(client: SupabaseClient, body: Record<string, unknown>): Promise<T> {
   const { data, error } = await client.functions.invoke('manage-private-files', { body });
   if (data && typeof data.error === 'string') throw new Error(data.error);
@@ -772,7 +783,7 @@ export async function createPlatformWorkshop(workshopName: string, ownerName: st
   const { data, error } = await clientOrDefault(client).functions.invoke('manage-workshop', {
     body: { action: 'create_workshop', workshop_name: workshopName, owner_name: ownerName, owner_email: ownerEmail },
   });
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(await edgeFunctionErrorMessage(error, 'Não foi possível criar a oficina. Tente novamente.'));
   if (data?.error) throw new Error(data.error);
   return data.workshop_id as string;
 }
@@ -822,7 +833,7 @@ export async function inviteWorkshopEmployee(workshopId: string, fullName: strin
   const { data, error } = await clientOrDefault(client).functions.invoke('manage-workshop', {
     body: { action: 'invite_employee', workshop_id: workshopId, full_name: fullName, email, permissions },
   });
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(await edgeFunctionErrorMessage(error, 'Não foi possível enviar o convite ao funcionário. Tente novamente.'));
   if (data?.error) throw new Error(data.error);
 }
 

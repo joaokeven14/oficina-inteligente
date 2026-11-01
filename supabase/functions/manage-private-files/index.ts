@@ -55,7 +55,7 @@ function validId(value: unknown): value is string {
 
 Deno.serve(async (request) => {
   if (request.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
-  if (request.method !== 'POST') return json({ error: 'Method not allowed.' }, 405);
+  if (request.method !== 'POST') return json({ error: 'Método de solicitação não permitido.' }, 405);
 
   const url = Deno.env.get('SUPABASE_URL');
   const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
