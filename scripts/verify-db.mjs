@@ -1,36 +1,10 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { PGlite } from '@electric-sql/pglite';
 
 const db = new PGlite();
 const root = process.cwd();
-const migrations = [
-  'supabase/migrations/20261031190000_core_tenant_security.sql',
-  'supabase/migrations/20261031200000_customers_and_vehicles.sql',
-  'supabase/migrations/20261031210000_service_orders.sql',
-  'supabase/migrations/20261031220000_inventory.sql',
-  'supabase/migrations/20261031230000_suppliers_purchases_payables.sql',
-  'supabase/migrations/20261031240000_estimates.sql',
-  'supabase/migrations/20261031250000_dashboard_metrics.sql',
-  'supabase/migrations/20261031260000_warranties_reminders.sql',
-  'supabase/migrations/20261031270000_order_stock_deduction.sql',
-  'supabase/migrations/20261031280000_employee_management.sql',
-  'supabase/migrations/20261031290000_financial_entries.sql',
-  'supabase/migrations/20261031300000_service_order_inspection.sql',
-  'supabase/migrations/20261031310000_workshop_settings.sql',
-  'supabase/migrations/20261031320000_platform_metrics.sql',
-  'supabase/migrations/20261031330000_multi_item_purchases.sql',
-  'supabase/migrations/20261031340000_customer_authorizations.sql',
-  'supabase/migrations/20261031350000_service_order_attachments.sql',
-  'supabase/migrations/20261031360000_financial_reversals.sql',
-  'supabase/migrations/20261031370000_employee_time_commissions.sql',
-  'supabase/migrations/20261031380000_workshop_logos.sql',
-  'supabase/migrations/20261031390000_service_timer_lifecycle.sql',
-  'supabase/migrations/20261031400000_payable_reversals.sql',
-  'supabase/migrations/20261031410000_platform_owner_lookup.sql',
-  'supabase/migrations/20261031420000_payment_methods.sql',
-];
 
 async function asAuthenticatedUser(userId, operation, commit = false) {
   await db.exec('begin');
@@ -47,9 +21,15 @@ async function asAuthenticatedUser(userId, operation, commit = false) {
 }
 
 async function main() {
+  const migrations = (await readdir(resolve(root, 'supabase/migrations')))
+    .filter((name) => name.endsWith('.sql'))
+    .sort()
+    .map((name) => `supabase/migrations/${name}`);
+
   await db.exec(`
     create role anon nologin;
     create role authenticated nologin;
+    create role service_role nologin;
     create schema auth;
     create schema storage;
     create table storage.buckets (
@@ -63,6 +43,8 @@ async function main() {
       id uuid primary key default gen_random_uuid(),
       bucket_id text not null,
       name text not null,
+      owner uuid,
+      owner_id text,
       unique(bucket_id,name)
     );
     alter table storage.objects enable row level security;
@@ -82,6 +64,9 @@ async function main() {
     create function auth.uid() returns uuid
     language sql stable
     as $$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
+    -- Supabase's dashboard-created event-trigger helper is not part of the app migration set.
+    create function public.rls_auto_enable() returns void
+      language plpgsql as $$ begin return; end $$;
     grant usage on schema auth to anon, authenticated;
     grant execute on function auth.uid() to public;
   `);
@@ -138,19 +123,24 @@ async function main() {
   }, true);
   assert.deepEqual(workshopSettings.rows[0], { name: 'Tenant A', cnpj: '12345678000199', email: 'contato@oficina.test', state: 'MT' });
   const logoPath = '20000000-0000-4000-8000-000000000001/logo.png';
-  await asAuthenticatedUser('10000000-0000-4000-8000-000000000001', async () => {
-    await db.query('insert into storage.objects(bucket_id,name) values(\'workshop-logos\',$1)',[logoPath]);
+  const savedLogo = await asAuthenticatedUser('10000000-0000-4000-8000-000000000001', async () => {
     await db.query('select public.set_workshop_logo_path($1,$2)',['20000000-0000-4000-8000-000000000001',logoPath]);
+    return db.query("select logo_path from public.workshops where id='20000000-0000-4000-8000-000000000001'");
   }, true);
-  const visibleLogo = await asAuthenticatedUser('10000000-0000-4000-8000-000000000003', () => db.query("select name from storage.objects where bucket_id='workshop-logos'"));
-  assert.deepEqual(visibleLogo.rows.map((row) => row.name),[logoPath]);
-  const foreignLogo = await asAuthenticatedUser('10000000-0000-4000-8000-000000000002', () => db.query("select name from storage.objects where bucket_id='workshop-logos'"));
-  assert.equal(foreignLogo.rows.length,0);
+  assert.equal(savedLogo.rows[0].logo_path, logoPath);
   await assert.rejects(
-    asAuthenticatedUser('10000000-0000-4000-8000-000000000002', () => db.query("insert into storage.objects(bucket_id,name) values('workshop-logos',$1)",[logoPath])),
+    asAuthenticatedUser('10000000-0000-4000-8000-000000000001', () => db.query('select public.set_workshop_logo_path($1,$2)',['20000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000002/logo.png'])),
+    (error) => error.code === '22023',
+  );
+  await assert.rejects(
+    asAuthenticatedUser('10000000-0000-4000-8000-000000000002', () => db.query('select public.set_workshop_logo_path($1,$2)',['20000000-0000-4000-8000-000000000001',logoPath])),
     (error) => error.code === '42501',
   );
-  process.stdout.write('PASS: workshop logos are private, membership-readable, and protected against cross-tenant uploads\n');
+  await assert.rejects(
+    asAuthenticatedUser('10000000-0000-4000-8000-000000000001', () => db.query("insert into storage.objects(bucket_id,name) values('workshop-logos',$1)",[logoPath])),
+    (error) => error.code === '42501',
+  );
+  process.stdout.write('PASS: workshop logos are owner-scoped and stored through signed private uploads\n');
   await assert.rejects(
     asAuthenticatedUser('10000000-0000-4000-8000-000000000003', () => db.query("select public.save_workshop_settings($1,'Tenant A',null,null,null,null,null,null,null,null,null)", ['20000000-0000-4000-8000-000000000001'])),
     (error) => error.code === '42501',
@@ -269,11 +259,12 @@ async function main() {
       values('20000000-0000-4000-8000-000000000001',$1,'40000000-0000-4000-8000-000000000001','service','Cliente A','Autorizo os serviços da ordem',80.44,$2::jsonb) returning id,signed_by,signed_at`,
       [orderId, JSON.stringify([[{ x: 0.1, y: 0.5 }, { x: 0.5, y: 0.4 }, { x: 0.9, y: 0.6 }]])]);
     const photoPath = `20000000-0000-4000-8000-000000000001/${orderId}/entrada.jpg`;
-    await db.query(`insert into storage.objects(bucket_id,name) values('service-order-photos',$1)`, [photoPath]);
     const attachment = await db.query(`insert into public.service_order_attachments(workshop_id,service_order_id,storage_path,file_name,mime_type,size_bytes,caption)
       values('20000000-0000-4000-8000-000000000001',$1,$2,'entrada.jpg','image/jpeg',1024,'Foto de entrada') returning id`, [orderId, photoPath]);
     return { count: seeded.rows[0].count, item: saved.rows[0], orderId, authorization: authorization.rows[0], attachmentId: attachment.rows[0].id, photoPath };
   }, true);
+  // Simulate Storage accepting the signed upload outside the caller's SQL/RLS session.
+  await db.query(`insert into storage.objects(bucket_id,name) values('service-order-photos',$1)`, [inspection.photoPath]);
   assert.equal(inspection.count,25);
   assert.equal(inspection.item.condition,'attention');
   assert.equal(inspection.authorization.signed_by, '10000000-0000-4000-8000-000000000001');
@@ -671,6 +662,65 @@ async function main() {
     db.query('select id from public.inventory_products'));
   assert.equal(blockedProducts.rows.length, 0);
   process.stdout.write('PASS: blocking a workshop removes inventory visibility\n');
+
+  const deletionWorkshopId = '20000000-0000-4000-8000-000000000003';
+  const reusableUserId = '10000000-0000-4000-8000-000000000005';
+  const sharedUserId = '10000000-0000-4000-8000-000000000002';
+  const platformAdminId = '10000000-0000-4000-8000-000000000004';
+  const storedFileUserId = '10000000-0000-4000-8000-000000000006';
+  await db.exec(`
+    insert into auth.users (id, email, raw_user_meta_data) values
+      ('${reusableUserId}', 'reusable@example.test', '{}'),
+      ('${storedFileUserId}', 'stored-file@example.test', '{}');
+    insert into public.workshops (id, name) values ('${deletionWorkshopId}', 'Tenant C');
+    insert into public.workshop_memberships (workshop_id, user_id, role) values
+      ('${deletionWorkshopId}', '${reusableUserId}', 'owner'),
+      ('${deletionWorkshopId}', '${sharedUserId}', 'staff'),
+      ('${deletionWorkshopId}', '${platformAdminId}', 'staff'),
+      ('${deletionWorkshopId}', '${storedFileUserId}', 'staff');
+    insert into storage.objects (bucket_id, name, owner, owner_id) values
+      ('service-order-photos', '${deletionWorkshopId}/photo.jpg', '${reusableUserId}', '${reusableUserId}'),
+      ('service-order-photos', 'legacy/photo.jpg', '${storedFileUserId}', '${storedFileUserId}');
+  `);
+
+  await assert.rejects(
+    asAuthenticatedUser('10000000-0000-4000-8000-000000000001', () =>
+      db.query('select public.admin_delete_workshop($1,$2)', [deletionWorkshopId, 'Tenant C'])),
+    (error) => error.code === '42501',
+  );
+  await assert.rejects(
+    asAuthenticatedUser(platformAdminId, () =>
+      db.query('select public.admin_delete_workshop($1,$2)', [deletionWorkshopId, 'Nome incorreto'])),
+    (error) => error.code === '22023',
+  );
+  const workshopAfterRejectedDeletes = await db.query('select id from public.workshops where id=$1', [deletionWorkshopId]);
+  assert.equal(workshopAfterRejectedDeletes.rows.length, 1);
+
+  const cleanupBatch = await asAuthenticatedUser(platformAdminId, () =>
+    db.query('select public.admin_delete_workshop($1,$2) as id', [deletionWorkshopId, 'Tenant C']), true);
+  const cleanupBatchId = cleanupBatch.rows[0].id;
+  const deletedWorkshop = await db.query('select id from public.workshops where id=$1', [deletionWorkshopId]);
+  assert.equal(deletedWorkshop.rows.length, 0);
+  await db.query('delete from storage.objects where name like $1', [`${deletionWorkshopId}/%`]);
+
+  await assert.rejects(
+    asAuthenticatedUser('10000000-0000-4000-8000-000000000001', () =>
+      db.query('select public.admin_finalize_workshop_account_cleanup($1)', [cleanupBatchId])),
+    (error) => error.code === '42501',
+  );
+  const accountCleanup = await asAuthenticatedUser(platformAdminId, () =>
+    db.query('select public.admin_finalize_workshop_account_cleanup($1) as result', [cleanupBatchId]), true);
+  const cleanupCounts = accountCleanup.rows[0].result;
+  assert.equal(Number(cleanupCounts.released_accounts), 1);
+  assert.equal(Number(cleanupCounts.preserved_linked_accounts), 2);
+  assert.equal(Number(cleanupCounts.preserved_storage_accounts), 1);
+  const remainingUsers = await db.query(
+    'select id from auth.users where id=any($1::uuid[])',
+    [[reusableUserId, sharedUserId, platformAdminId, storedFileUserId]],
+  );
+  assert.deepEqual(remainingUsers.rows.map((row) => row.id).sort(), [sharedUserId, platformAdminId, storedFileUserId].sort());
+  await db.query("insert into auth.users (id,email,raw_user_meta_data) values ('10000000-0000-4000-8000-000000000007','reusable@example.test','{}')");
+  process.stdout.write('PASS: deleting a workshop frees exclusive emails while preserving shared, administrator, and stored-file accounts\n');
 }
 
 try {

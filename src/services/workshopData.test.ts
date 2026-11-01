@@ -81,14 +81,19 @@ describe('workshop data validation', () => {
   });
 
   it('removes an uploaded object if the attachment metadata insert fails', async () => {
-    const upload = jest.fn().mockResolvedValue({ error: null });
-    const remove = jest.fn().mockResolvedValue({ error: null });
-    const storage = { from: jest.fn(() => ({ upload, remove })) };
+    const uploadToSignedUrl = jest.fn().mockResolvedValue({ error: null });
+    const path = 'tenant-a/order-a/photo-id.jpg';
+    const invoke = jest.fn()
+      .mockResolvedValueOnce({ data: { path, token: 'upload-token' }, error: null })
+      .mockResolvedValueOnce({ data: { removed: true }, error: null });
+    const storage = { from: jest.fn(() => ({ uploadToSignedUrl })) };
     const insert = jest.fn().mockResolvedValue({ error: { code: '42501', message: 'denied' } });
-    const client = { storage, from: jest.fn(() => ({ insert })) } as unknown as SupabaseClient;
+    const client = { functions: { invoke }, storage, from: jest.fn(() => ({ insert })) } as unknown as SupabaseClient;
     await expect(uploadServiceOrderPhoto('tenant-a','order-a',new Blob(['image']),'photo.jpg','image/jpeg','front',client))
       .rejects.toThrow('Seu usuário não tem permissão para essa operação.');
-    expect(upload).toHaveBeenCalledWith(expect.stringMatching(/^tenant-a\/order-a\//), expect.any(Blob), expect.objectContaining({ contentType: 'image/jpeg', upsert: false }));
-    expect(remove).toHaveBeenCalledWith([upload.mock.calls[0][0]]);
+    expect(uploadToSignedUrl).toHaveBeenCalledWith(path, 'upload-token', expect.any(Blob), expect.objectContaining({ contentType: 'image/jpeg', upsert: false }));
+    expect(invoke).toHaveBeenNthCalledWith(2, 'manage-private-files', {
+      body: { action: 'remove_photo', kind: 'photo', workshop_id: 'tenant-a', service_order_id: 'order-a', storage_path: path },
+    });
   });
 });
