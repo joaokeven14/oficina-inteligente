@@ -24,6 +24,21 @@ const additionalBrands: Record<VehicleCatalogType, string[]> = {
   ],
 };
 
+// Modelos encontrados na base pública RENAVAM (Ministério dos Transportes, setembro de 2026).
+const additionalModels: Partial<Record<VehicleCatalogType, Record<string, string[]>>> = {
+  motorcycles: {
+    tvs: ['Apache 160 RTR', 'Apache 200 RTR', 'Ntorq 125 Race XP', 'Raider 125', 'Sport 110i'],
+  },
+  trucks: {
+    international: [
+      '3100P7', '4400 4X2', '4400 6X2', '4400 6X4', '4400P7 4X2', '4400P7 6X2', '4400P7 6X4',
+      '4700 4X2', '4700T 4X2', '4900 4X2', '4900 6X4', '9800 4X2', '9800 6X4', '9800I 6X2',
+      '9800I 6X4', '9800I RBTK', '9800P7 6X2', '9800P7 6X4', 'NEOBUSTH O', 'NEOBUSTH U',
+    ],
+    randon: ['RK 125', 'RK 425', 'RK 628', 'RL 425'],
+  },
+};
+
 function normalizedName(name: string) {
   return name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('pt-BR').replace(/[^a-z0-9]/g, '');
 }
@@ -89,7 +104,12 @@ export function listVehicleBrands(type: VehicleCatalogType): Promise<VehicleCata
 }
 
 export function listVehicleModels(type: VehicleCatalogType, brandCode: string): Promise<VehicleCatalogOption[]> {
-  if (brandCode.startsWith('supplemental:')) return Promise.resolve([]);
+  if (brandCode.startsWith('supplemental:')) {
+    const [, supplementalType, brand] = brandCode.split(':');
+    if (supplementalType !== type) return Promise.resolve([]);
+    const names = additionalModels[type]?.[brand] ?? [];
+    return Promise.resolve(names.map((name, index) => ({ code: `supplemental:${brand}:${index}`, name })));
+  }
   return getCatalogOptions(`${type}/brands/${encodeURIComponent(brandCode)}/models`);
 }
 
