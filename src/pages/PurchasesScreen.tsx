@@ -28,6 +28,7 @@ export default function PurchasesScreen({ workshopId }: { workshopId: string }) 
   const [supplierCreate, setSupplierCreate] = useState(false);
   const [supplierUpdate, setSupplierUpdate] = useState(false);
   const [supplierDelete, setSupplierDelete] = useState(false);
+  const [supplierFormOpen, setSupplierFormOpen] = useState(false);
   const [editingSupplierId, setEditingSupplierId] = useState<string | null>(null);
   const [supplierName, setSupplierName] = useState('');
   const [supplierCnpj, setSupplierCnpj] = useState('');
@@ -72,7 +73,7 @@ export default function PurchasesScreen({ workshopId }: { workshopId: string }) 
       ]);
       const [payableRows, reversalRows] = permissions.finance.view ? await Promise.all([listPayables(workshopId), listPayablePaymentReversals(workshopId)]) : [[], []];
       setSuppliers(vendorRows); setProducts(productRows); setPurchases(purchaseRows); setPayables(payableRows); setPayableReversals(reversalRows);
-      setSupplierId((current) => current || vendorRows[0]?.id || ''); setProductId((current) => current || '');
+      setSupplierId((current) => current && vendorRows.some((supplier) => supplier.id === current) ? current : ''); setProductId((current) => current || '');
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Não foi possível carregar compras.'); }
     finally { setLoading(false); }
   }, [workshopId]);
@@ -83,14 +84,14 @@ export default function PurchasesScreen({ workshopId }: { workshopId: string }) 
   const matchingSuppliers = useMemo(() => {
     const query = searchKey(supplierSearch);
     const compactQuery = compactSearchKey(supplierSearch);
-    if (!query) return suppliers;
+    if (!query) return [];
     return suppliers.filter((supplier) => [supplier.name, supplier.cnpj ?? '', supplier.phone ?? '', supplier.email ?? '', supplier.contact_name ?? '']
       .some((value) => searchKey(value).includes(query) || (compactQuery && compactSearchKey(value).includes(compactQuery))));
   }, [supplierSearch, suppliers]);
   const matchingProducts = useMemo(() => {
     const query = searchKey(productSearch);
     const compactQuery = compactSearchKey(productSearch);
-    if (!query) return products;
+    if (!query) return [];
     return products.filter((product) => [product.name, product.code ?? '', product.brand ?? '', product.category ?? '', product.location ?? '']
       .some((value) => searchKey(value).includes(query) || (compactQuery && compactSearchKey(value).includes(compactQuery))));
   }, [productSearch, products]);
@@ -105,12 +106,17 @@ export default function PurchasesScreen({ workshopId }: { workshopId: string }) 
   };
   const saveSupplierDetails = () => perform(async () => {
     await saveSupplier(workshopId, { name: supplierName, cnpj: supplierCnpj || null, phone: supplierPhone || null, email: supplierEmail || null, address: supplierAddress || null, contact_name: supplierContact || null, notes: supplierNotes || null }, editingSupplierId ?? undefined);
-    setEditingSupplierId(null); setSupplierName(''); setSupplierCnpj(''); setSupplierPhone(''); setSupplierEmail(''); setSupplierAddress(''); setSupplierContact(''); setSupplierNotes('');
+    setEditingSupplierId(null); setSupplierName(''); setSupplierCnpj(''); setSupplierPhone(''); setSupplierEmail(''); setSupplierAddress(''); setSupplierContact(''); setSupplierNotes(''); setSupplierFormOpen(false);
   });
   const editSupplier = (supplier: Supplier) => {
     setEditingSupplierId(supplier.id); setSupplierName(supplier.name); setSupplierCnpj(supplier.cnpj ?? ''); setSupplierPhone(supplier.phone ?? '');
-    setSupplierEmail(supplier.email ?? ''); setSupplierAddress(supplier.address ?? ''); setSupplierContact(supplier.contact_name ?? ''); setSupplierNotes(supplier.notes ?? ''); setError('');
+    setSupplierEmail(supplier.email ?? ''); setSupplierAddress(supplier.address ?? ''); setSupplierContact(supplier.contact_name ?? ''); setSupplierNotes(supplier.notes ?? ''); setError(''); setSupplierFormOpen(true);
   };
+  const clearSupplierForm = () => {
+    setEditingSupplierId(null); setSupplierName(''); setSupplierCnpj(''); setSupplierPhone(''); setSupplierEmail(''); setSupplierAddress(''); setSupplierContact(''); setSupplierNotes('');
+  };
+  const beginCreateSupplier = () => { clearSupplierForm(); setError(''); setSupplierFormOpen(true); };
+  const closeSupplierForm = () => { if (busy) return; setSupplierFormOpen(false); clearSupplierForm(); setError(''); };
   const confirmArchiveSupplier = (supplier: Supplier) => Alert.alert('Arquivar fornecedor', `Arquivar ${supplier.name}? O histórico de compras será preservado.`, [
     { text: 'Cancelar', style: 'cancel' }, { text: 'Arquivar', style: 'destructive', onPress: () => { perform(async () => { await archiveSupplier(workshopId, supplier.id); if (supplierId === supplier.id) setSupplierId(''); }).catch(() => undefined); } },
   ]);
@@ -139,31 +145,22 @@ export default function PurchasesScreen({ workshopId }: { workshopId: string }) 
     <Text style={styles.title}>Fornecedores e compras</Text>
     <Text style={styles.subtitle}>Receber uma compra atualiza o estoque e cria a conta a pagar de forma atômica.</Text>
     {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
-    {supplierCreate || supplierUpdate ? <View style={styles.card}>
-      <Text style={styles.section}>{editingSupplierId ? 'Editar fornecedor' : 'Cadastrar fornecedor'}</Text>
-      <FormField label="Nome" required value={supplierName} onChangeText={setSupplierName} />
-      <FormField label="CNPJ" value={supplierCnpj} onChangeText={setSupplierCnpj} keyboardType="number-pad" />
-      <View style={styles.row}><View style={styles.half}><FormField label="Telefone" value={supplierPhone} onChangeText={setSupplierPhone} keyboardType="phone-pad" /></View><View style={styles.half}><FormField label="Contato" value={supplierContact} onChangeText={setSupplierContact} /></View></View>
-      <FormField label="E-mail" value={supplierEmail} onChangeText={setSupplierEmail} keyboardType="email-address" />
-      <FormField label="Endereço" value={supplierAddress} onChangeText={setSupplierAddress} />
-      <FormField label="Observações" value={supplierNotes} onChangeText={setSupplierNotes} multiline />
-      <Pressable disabled={busy || !supplierName.trim() || (editingSupplierId ? !supplierUpdate : !supplierCreate)} style={[styles.button, busy && styles.disabled]} onPress={saveSupplierDetails}><Text style={styles.buttonText}>{editingSupplierId ? 'Salvar alterações' : 'Salvar fornecedor'}</Text></Pressable>
-      {editingSupplierId ? <Pressable disabled={busy} style={styles.secondaryButton} onPress={() => { setEditingSupplierId(null); setSupplierName(''); setSupplierCnpj(''); setSupplierPhone(''); setSupplierEmail(''); setSupplierAddress(''); setSupplierContact(''); setSupplierNotes(''); }}><Text style={styles.secondaryButtonText}>Cancelar edição</Text></Pressable> : null}
-    </View> : null}
-    <View style={styles.card}><Text style={styles.section}>Fornecedores</Text>
+    <View style={styles.card}><View style={styles.sectionHeader}><Text style={styles.section}>Fornecedores</Text>{supplierCreate ? <Pressable accessibilityRole="button" style={styles.smallButton} onPress={beginCreateSupplier}><Text style={styles.smallButtonText}>Cadastrar fornecedor</Text></Pressable> : null}</View>
       {suppliers.map((supplier) => <View key={supplier.id} style={styles.listRow}><View style={styles.flex}><Text style={styles.itemTitle}>{supplier.name}</Text><Text style={styles.muted}>{[supplier.cnpj, supplier.phone, supplier.email].filter(Boolean).join(' · ') || 'Sem contato informado'}</Text></View>{supplierUpdate ? <Pressable style={styles.smallButton} onPress={() => editSupplier(supplier)}><Text style={styles.smallButtonText}>Editar</Text></Pressable> : null}{supplierDelete ? <Pressable style={styles.removeButton} onPress={() => confirmArchiveSupplier(supplier)}><Text style={styles.removeText}>Arquivar</Text></Pressable> : null}</View>)}
-      {!suppliers.length ? <Text style={styles.muted}>Cadastre um fornecedor para registrar compras.</Text> : null}
+      {!suppliers.length ? <Text style={styles.muted}>Nenhum fornecedor cadastrado.</Text> : null}
     </View>
     {purchaseCreate ? <View style={styles.card}>
       <Text style={styles.section}>Nova compra</Text>
       <FormField label="Pesquisar fornecedor por nome, CNPJ, telefone ou contato" value={supplierSearch} onChangeText={setSupplierSearch} placeholder="Digite para localizar o fornecedor" />
       {selectedSupplier ? <Text style={[styles.muted, { color: '#315a80', fontWeight: '700' }]}>Fornecedor selecionado: {selectedSupplier.name}</Text> : null}
       <View style={styles.chips}>{displayedSuppliers.map((supplier) => <Pressable key={supplier.id} accessibilityRole="button" accessibilityState={{ selected: supplierId === supplier.id }} style={[styles.chip, supplierId === supplier.id && styles.chipSelected]} onPress={() => setSupplierId(supplier.id)}><Text style={[styles.chipText, supplierId === supplier.id && styles.chipTextSelected]}>{supplier.name}</Text></Pressable>)}</View>
+      {!supplierSearch.trim() ? <Text style={styles.muted}>Digite na pesquisa para localizar um fornecedor.</Text> : null}
       {matchingSuppliers.length > displayedSuppliers.length ? <Text style={styles.muted}>Mostrando 30 fornecedores. Digite mais dados para refinar.</Text> : null}
       {supplierSearch.trim() && !matchingSuppliers.length ? <Text style={styles.muted}>Nenhum fornecedor encontrado com esses dados.</Text> : null}
       <FormField label="Pesquisar produto por nome, código, marca ou categoria" value={productSearch} onChangeText={setProductSearch} placeholder="Digite para localizar o produto" />
       {selectedProduct ? <Text style={[styles.muted, { color: '#315a80', fontWeight: '700' }]}>Produto selecionado: {selectedProduct.name}</Text> : null}
       <View style={styles.chips}>{displayedProducts.map((product) => <Pressable key={product.id} accessibilityRole="button" accessibilityState={{ selected: productId === product.id }} style={[styles.chip, productId === product.id && styles.chipSelected]} onPress={() => { setProductId(product.id); setUnitCost(String(product.cost_price)); }}><Text style={[styles.chipText, productId === product.id && styles.chipTextSelected]}>{product.name}{product.code ? ` · ${product.code}` : ''}</Text></Pressable>)}</View>
+      {!productSearch.trim() ? <Text style={styles.muted}>Digite na pesquisa para localizar um produto em estoque.</Text> : null}
       {matchingProducts.length > displayedProducts.length ? <Text style={styles.muted}>Mostrando 30 produtos. Digite mais dados para refinar.</Text> : null}
       {productSearch.trim() && !matchingProducts.length ? <Text style={styles.muted}>Nenhum produto encontrado com esses dados.</Text> : null}
       <View style={styles.row}><View style={styles.half}><FormField label="Quantidade" required value={quantity} onChangeText={setQuantity} keyboardType="decimal-pad" /></View><View style={styles.half}><FormField label="Custo unitário (R$)" required value={unitCost} onChangeText={setUnitCost} keyboardType="decimal-pad" /></View></View>
@@ -185,9 +182,25 @@ export default function PurchasesScreen({ workshopId }: { workshopId: string }) 
       {payables.map((payable) => <View key={payable.id} style={styles.listRow}><View style={styles.flex}><Text style={styles.itemTitle}>{payable.suppliers?.name ?? payable.description} · {money(payable.amount)}</Text><Text style={styles.muted}>{payable.status === 'paid' ? `Paga · ${paymentMethodLabel(payable.payment_method) ?? 'forma não informada'}` : 'Pendente'} · vencimento {payable.due_date ?? 'não informado'}</Text>{payableReversals.filter((entry) => entry.payable_id === payable.id).map((entry) => <Text key={entry.id} style={styles.reversalText}>Estorno em {new Date(entry.reversed_at).toLocaleString('pt-BR')}: {entry.reason}{entry.previous_payment_method ? ` · forma anterior: ${paymentMethodLabel(entry.previous_payment_method) ?? entry.previous_payment_method}` : ''}</Text>)}</View>{payable.status === 'pending' && financeUpdate ? <Pressable disabled={busy} style={styles.smallButton} onPress={() => { setPayableToSettle(payable); setPaymentMethod('pix'); }}><Text style={styles.smallButtonText}>Marcar paga</Text></Pressable> : payable.status === 'paid' && financeUpdate ? <Pressable accessibilityRole="button" accessibilityLabel={`Estornar pagamento ${payable.id}`} disabled={busy} style={styles.reverseButton} onPress={() => { setPayableToReverse(payable); setReversalReason(''); setError(''); }}><Text style={styles.reverseButtonText}>Estornar pagamento</Text></Pressable> : null}</View>)}
       {!payables.length ? <Text style={styles.muted}>As contas surgem quando uma compra é recebida.</Text> : null}
     </View> : null}
+    <Modal visible={supplierFormOpen} animationType="slide" onRequestClose={closeSupplierForm}>
+      <ScrollView contentContainerStyle={styles.supplierFormPage} keyboardShouldPersistTaps="handled">
+        <View style={styles.supplierFormHeader}><View style={styles.flex}><Text style={styles.title}>{editingSupplierId ? 'Editar fornecedor' : 'Cadastrar fornecedor'}</Text><Text style={styles.subtitle}>Preencha os dados do fornecedor.</Text></View><Pressable accessibilityRole="button" disabled={busy} onPress={closeSupplierForm}><Text style={styles.cancelText}>Fechar</Text></Pressable></View>
+        {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
+        <View style={styles.card}>
+          <FormField label="Nome" required value={supplierName} onChangeText={setSupplierName} />
+          <FormField label="CNPJ" value={supplierCnpj} onChangeText={setSupplierCnpj} keyboardType="number-pad" />
+          <View style={styles.row}><View style={styles.half}><FormField label="Telefone" value={supplierPhone} onChangeText={setSupplierPhone} keyboardType="phone-pad" /></View><View style={styles.half}><FormField label="Contato" value={supplierContact} onChangeText={setSupplierContact} /></View></View>
+          <FormField label="E-mail" value={supplierEmail} onChangeText={setSupplierEmail} keyboardType="email-address" />
+          <FormField label="Endereço" value={supplierAddress} onChangeText={setSupplierAddress} />
+          <FormField label="Observações" value={supplierNotes} onChangeText={setSupplierNotes} multiline />
+          <Pressable disabled={busy || !supplierName.trim() || (editingSupplierId ? !supplierUpdate : !supplierCreate)} style={[styles.button, busy && styles.disabled]} onPress={saveSupplierDetails}><Text style={styles.buttonText}>{busy ? 'Salvando…' : editingSupplierId ? 'Salvar alterações' : 'Salvar fornecedor'}</Text></Pressable>
+          <Pressable disabled={busy} style={styles.secondaryButton} onPress={closeSupplierForm}><Text style={styles.secondaryButtonText}>Cancelar</Text></Pressable>
+        </View>
+      </ScrollView>
+    </Modal>
     <Modal transparent visible={!!payableToReverse} animationType="fade" onRequestClose={() => setPayableToReverse(null)}><View style={styles.modalBackdrop}><View style={styles.modalCard}><Text style={styles.section}>Estornar pagamento ao fornecedor</Text><Text style={styles.muted}>{payableToReverse?.description} · {payableToReverse ? money(payableToReverse.amount) : ''}</Text><Text style={styles.muted}>A conta voltará a pendente e o motivo ficará na trilha imutável.</Text><FormField label="Motivo do estorno" required value={reversalReason} onChangeText={setReversalReason} multiline placeholder="Ex.: pagamento duplicado" /><View style={styles.modalActions}><Pressable disabled={busy} style={styles.cancelButton} onPress={() => setPayableToReverse(null)}><Text style={styles.cancelText}>Cancelar</Text></Pressable><Pressable accessibilityRole="button" accessibilityLabel="Confirmar estorno da conta a pagar" disabled={busy} style={styles.confirmButton} onPress={confirmPayableReversal}><Text style={styles.buttonText}>{busy ? 'Estornando…' : 'Confirmar estorno'}</Text></Pressable></View></View></View></Modal>
     <Modal transparent visible={!!payableToSettle} animationType="fade" onRequestClose={() => { if (!busy) setPayableToSettle(null); }}><View style={styles.modalBackdrop}><View style={styles.modalCard}><Text style={styles.section}>Registrar pagamento</Text><Text style={styles.muted}>{payableToSettle?.description} · {payableToSettle ? money(payableToSettle.amount) : ''}</Text><Text style={styles.label}>Forma usada</Text><View style={styles.chips}>{paymentMethods.map((method) => <Pressable key={method.value} accessibilityRole="button" accessibilityState={{ selected: paymentMethod === method.value }} style={[styles.chip, paymentMethod === method.value && styles.chipSelected]} onPress={() => setPaymentMethod(method.value)}><Text style={[styles.chipText, paymentMethod === method.value && styles.chipTextSelected]}>{method.label}</Text></Pressable>)}</View><View style={styles.modalActions}><Pressable disabled={busy} style={styles.cancelButton} onPress={() => setPayableToSettle(null)}><Text style={styles.cancelText}>Cancelar</Text></Pressable><Pressable accessibilityRole="button" disabled={busy} style={styles.button} onPress={confirmPayableSettlement}><Text style={styles.buttonText}>{busy ? 'Salvando…' : 'Confirmar pagamento'}</Text></Pressable></View></View></View></Modal>
   </ScrollView>;
 }
 
-const styles = StyleSheet.create({ page: { paddingVertical: 22, paddingBottom: 36, gap: 12 }, loading: { marginTop: 35 }, title: { color: '#10243a', fontSize: 24, fontWeight: '800' }, subtitle: { color: '#718197', fontSize: 12, lineHeight: 18 }, card: { padding: 15, borderWidth: 1, borderColor: '#e1e8ef', borderRadius: 13, backgroundColor: '#fff', gap: 8 }, section: { color: '#10243a', fontSize: 15, fontWeight: '800' }, label: { marginTop: 5, color: '#52657a', fontSize: 11, fontWeight: '700' }, chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 }, chip: { paddingHorizontal: 9, paddingVertical: 7, borderWidth: 1, borderColor: '#dae2ea', borderRadius: 8 }, chipSelected: { borderColor: '#10243a', backgroundColor: '#10243a' }, chipText: { color: '#41546a', fontSize: 10 }, chipTextSelected: { color: '#fff', fontWeight: '700' }, row: { flexDirection: 'row', gap: 9 }, half: { flex: 1 }, button: { minHeight: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 9, backgroundColor: '#10243a' }, buttonText: { color: '#fff', fontSize: 12, fontWeight: '700' }, secondaryButton: { minHeight: 38, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#cad6e2', borderRadius: 9 }, secondaryButtonText: { color: '#26425f', fontSize: 11, fontWeight: '700' }, disabled: { opacity: 0.5 }, listRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 10, paddingVertical: 10, borderTopWidth: 1, borderTopColor: '#edf0f4' }, flex: { flex: 1 }, itemTitle: { color: '#20354b', fontSize: 12, fontWeight: '700' }, removeButton: { padding: 6 }, removeText: { color: '#a23d33', fontSize: 10, fontWeight: '700' }, muted: { color: '#7b8999', fontSize: 10, lineHeight: 15 }, reversalText: { marginTop: 4, color: '#986025', fontSize: 9, lineHeight: 13 }, smallButton: { paddingHorizontal: 10, paddingVertical: 8, borderRadius: 7, backgroundColor: '#e97824' }, smallButtonText: { color: '#fff', fontSize: 10, fontWeight: '800' }, reverseButton: { paddingHorizontal: 9, paddingVertical: 8, borderWidth: 1, borderColor: '#d6a49a', borderRadius: 7 }, reverseButtonText: { color: '#a23d33', fontSize: 9, fontWeight: '700' }, modalBackdrop: { flex: 1, padding: 18, justifyContent: 'center', backgroundColor: '#0008' }, modalCard: { padding: 17, gap: 9, borderRadius: 14, backgroundColor: '#fff' }, modalActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 8 }, cancelButton: { minHeight: 38, paddingHorizontal: 12, justifyContent: 'center' }, cancelText: { color: '#52657a', fontSize: 11 }, confirmButton: { minHeight: 38, paddingHorizontal: 14, alignItems: 'center', justifyContent: 'center', borderRadius: 8, backgroundColor: '#a23d33' }, error: { color: '#a23d33', fontSize: 12 }, });
+const styles = StyleSheet.create({ page: { paddingVertical: 22, paddingBottom: 36, gap: 12 }, supplierFormPage: { flexGrow: 1, paddingHorizontal: 18, paddingTop: 24, backgroundColor: '#f4f7fa', gap: 16 }, supplierFormHeader: { flexDirection: 'row', alignItems: 'center', gap: 12 }, sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }, loading: { marginTop: 35 }, title: { color: '#10243a', fontSize: 24, fontWeight: '800' }, subtitle: { color: '#718197', fontSize: 12, lineHeight: 18 }, card: { padding: 15, borderWidth: 1, borderColor: '#e1e8ef', borderRadius: 13, backgroundColor: '#fff', gap: 8 }, section: { color: '#10243a', fontSize: 15, fontWeight: '800' }, label: { marginTop: 5, color: '#52657a', fontSize: 11, fontWeight: '700' }, chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 }, chip: { paddingHorizontal: 9, paddingVertical: 7, borderWidth: 1, borderColor: '#dae2ea', borderRadius: 8 }, chipSelected: { borderColor: '#10243a', backgroundColor: '#10243a' }, chipText: { color: '#41546a', fontSize: 10 }, chipTextSelected: { color: '#fff', fontWeight: '700' }, row: { flexDirection: 'row', gap: 9 }, half: { flex: 1 }, button: { minHeight: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 9, backgroundColor: '#10243a' }, buttonText: { color: '#fff', fontSize: 12, fontWeight: '700' }, secondaryButton: { minHeight: 38, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#cad6e2', borderRadius: 9 }, secondaryButtonText: { color: '#26425f', fontSize: 11, fontWeight: '700' }, disabled: { opacity: 0.5 }, listRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 10, paddingVertical: 10, borderTopWidth: 1, borderTopColor: '#edf0f4' }, flex: { flex: 1 }, itemTitle: { color: '#20354b', fontSize: 12, fontWeight: '700' }, removeButton: { padding: 6 }, removeText: { color: '#a23d33', fontSize: 10, fontWeight: '700' }, muted: { color: '#7b8999', fontSize: 10, lineHeight: 15 }, reversalText: { marginTop: 4, color: '#986025', fontSize: 9, lineHeight: 13 }, smallButton: { paddingHorizontal: 10, paddingVertical: 8, borderRadius: 7, backgroundColor: '#e97824' }, smallButtonText: { color: '#fff', fontSize: 10, fontWeight: '800' }, reverseButton: { paddingHorizontal: 9, paddingVertical: 8, borderWidth: 1, borderColor: '#d6a49a', borderRadius: 7 }, reverseButtonText: { color: '#a23d33', fontSize: 9, fontWeight: '700' }, modalBackdrop: { flex: 1, padding: 18, justifyContent: 'center', backgroundColor: '#0008' }, modalCard: { padding: 17, gap: 9, borderRadius: 14, backgroundColor: '#fff' }, modalActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 8 }, cancelButton: { minHeight: 38, paddingHorizontal: 12, justifyContent: 'center' }, cancelText: { color: '#52657a', fontSize: 11 }, confirmButton: { minHeight: 38, paddingHorizontal: 14, alignItems: 'center', justifyContent: 'center', borderRadius: 8, backgroundColor: '#a23d33' }, error: { color: '#a23d33', fontSize: 12 }, });
