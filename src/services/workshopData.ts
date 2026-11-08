@@ -232,11 +232,12 @@ export async function archiveVehicle(workshopId: string, vehicleId: string, clie
   if (!data) throw new Error('Veículo não encontrado ou sem permissão para arquivamento.');
 }
 
-export async function listServiceOrders(workshopId: string, client?: SupabaseClient): Promise<ServiceOrder[]> {
+export async function listServiceOrders(workshopId: string, client?: SupabaseClient, includeCustomerDocument = false): Promise<ServiceOrder[]> {
   const supabase = clientOrDefault(client);
+  const customerFields = includeCustomerDocument ? 'full_name, document' : 'full_name';
   const data = await fetchAllPages((from, to) => supabase
     .from('service_orders')
-    .select('id, workshop_id, order_number, customer_id, vehicle_id, assigned_membership_id, status, opened_at, completed_at, odometer_km, complaint, diagnosis, notes, items_subtotal, discount, total_amount, customers!inner(full_name), vehicles!inner(make, model, plate)')
+    .select(`id, workshop_id, order_number, customer_id, vehicle_id, assigned_membership_id, status, opened_at, completed_at, odometer_km, complaint, diagnosis, notes, items_subtotal, discount, total_amount, customers!inner(${customerFields}), vehicles!inner(make, model, plate)`)
     .eq('workshop_id', workshopId)
     .order('opened_at', { ascending: false }).order('id', { ascending: true }).range(from, to));
   return data as unknown as ServiceOrder[];
@@ -736,10 +737,11 @@ export async function completeMaintenanceReminder(workshopId: string, reminderId
   if (!data) throw new Error('Lembrete não encontrado ou já concluído.');
 }
 
-export async function listServiceWarranties(workshopId: string, client?: SupabaseClient): Promise<ServiceWarranty[]> {
+export async function listServiceWarranties(workshopId: string, client?: SupabaseClient, includeCustomerDocument = false): Promise<ServiceWarranty[]> {
   const supabase = clientOrDefault(client);
+  const customerFields = includeCustomerDocument ? 'full_name, document' : 'full_name';
   const data = await fetchAllPages((from, to) => supabase.from('service_warranties')
-    .select('*, service_orders!inner(order_number, customers!inner(full_name), vehicles!inner(make, model, plate))')
+    .select(`*, service_orders!inner(order_number, customers!inner(${customerFields}), vehicles!inner(make, model, plate))`)
     .eq('workshop_id', workshopId).order('ends_on', { ascending: true }).order('id', { ascending: true }).range(from, to));
   return data as unknown as ServiceWarranty[];
 }

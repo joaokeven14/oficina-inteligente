@@ -9,6 +9,7 @@ import { openPrintableDocument } from '../utils/printDocument';
 const today = formatLocalDate(new Date());
 const searchKey = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLocaleLowerCase('pt-BR');
 const compactSearchKey = (value: string) => searchKey(value).replace(/[^a-z0-9]/g, '');
+const matchesSearch = (value: string, query: string, compactQuery: string) => searchKey(value).includes(query) || (!!compactQuery && compactSearchKey(value).includes(compactQuery));
 export default function AfterSalesScreen({ workshopId, workshopName }: { workshopId: string; workshopName: string }) {
   const [reminders, setReminders] = useState<MaintenanceReminder[]>([]);
   const [warranties, setWarranties] = useState<ServiceWarranty[]>([]);
@@ -40,7 +41,7 @@ export default function AfterSalesScreen({ workshopId, workshopName }: { worksho
         return;
       }
       const [reminderRows, warrantyRows, vehicleRows, orderRows] = await Promise.all([
-        listMaintenanceReminders(workshopId), listServiceWarranties(workshopId), listVehicles(workshopId), listServiceOrders(workshopId),
+        listMaintenanceReminders(workshopId), listServiceWarranties(workshopId, undefined, true), listVehicles(workshopId), listServiceOrders(workshopId, undefined, true),
       ]);
       setReminders(reminderRows); setWarranties(warrantyRows); setVehicles(vehicleRows); setOrders(orderRows);
       setVehicleId((current) => current || vehicleRows[0]?.id || '');
@@ -54,15 +55,15 @@ export default function AfterSalesScreen({ workshopId, workshopName }: { worksho
     const query = searchKey(warrantySearch);
     const compactQuery = compactSearchKey(warrantySearch);
     if (!query) return [];
-    return eligibleOrders.filter((order) => [order.vehicles?.plate ?? '', order.customers?.full_name ?? '']
-      .some((value) => searchKey(value).includes(query) || (compactQuery && compactSearchKey(value).includes(compactQuery))));
+    return eligibleOrders.filter((order) => [String(order.order_number), `OS ${order.order_number}`, order.vehicles?.plate ?? '', order.customers?.full_name ?? '', order.customers?.document ?? '']
+      .some((value) => matchesSearch(value, query, compactQuery)));
   }, [eligibleOrders, warrantySearch]);
   const matchingWarrantyRecords = useMemo(() => {
     const query = searchKey(warrantyRecordsSearch);
     const compactQuery = compactSearchKey(warrantyRecordsSearch);
     if (!query) return warranties;
-    return warranties.filter((warranty) => [warranty.service_orders?.vehicles?.plate ?? '', warranty.service_orders?.customers?.full_name ?? '']
-      .some((value) => searchKey(value).includes(query) || (compactQuery && compactSearchKey(value).includes(compactQuery))));
+    return warranties.filter((warranty) => [String(warranty.service_orders?.order_number ?? ''), `OS ${warranty.service_orders?.order_number ?? ''}`, warranty.service_orders?.vehicles?.plate ?? '', warranty.service_orders?.customers?.full_name ?? '', warranty.service_orders?.customers?.document ?? '']
+      .some((value) => matchesSearch(value, query, compactQuery)));
   }, [warranties, warrantyRecordsSearch]);
   const selectedWarrantyOrder = eligibleOrders.find((order) => order.id === orderId) ?? null;
   const perform = async (task: () => Promise<void>) => {
@@ -124,11 +125,11 @@ export default function AfterSalesScreen({ workshopId, workshopName }: { worksho
       {!vehicles.length ? <Text style={styles.muted}>Cadastre veículos para consultar seus históricos.</Text> : null}
     </View>
     {canCreate ? <View style={styles.card}><Text style={styles.section}>Registrar garantia</Text>
-      <FormField label="Pesquisar por placa ou proprietário" value={warrantySearch} onChangeText={(value) => { setWarrantySearch(value); setOrderId(''); }} placeholder="Digite a placa ou o nome do proprietário" />
+      <FormField label="Pesquisar por placa, proprietário, CPF ou número da OS" value={warrantySearch} onChangeText={(value) => { setWarrantySearch(value); setOrderId(''); }} placeholder="Digite a placa, o nome, o CPF ou a OS" />
       {selectedWarrantyOrder ? <Text style={styles.selectedOrder}>OS selecionada: #{selectedWarrantyOrder.order_number} · {selectedWarrantyOrder.customers?.full_name ?? 'Proprietário'} · {selectedWarrantyOrder.vehicles?.plate ?? 'Sem placa'}</Text> : null}
       <View style={styles.chips}>{matchingWarrantyOrders.slice(0, 30).map((order) => <Pressable key={order.id} accessibilityRole="button" accessibilityState={{ selected: orderId === order.id }} style={[styles.chip, orderId === order.id && styles.active]} onPress={() => setOrderId(order.id)}><Text style={styles.chipText}>OS #{order.order_number} · {order.vehicles?.plate} · {order.customers?.full_name}</Text></Pressable>)}</View>
-      {!warrantySearch.trim() ? <Text style={styles.muted}>Pesquise pela placa do veículo ou pelo nome do proprietário para localizar uma OS concluída ou entregue.</Text> : null}
-      {warrantySearch.trim() && !matchingWarrantyOrders.length ? <Text style={styles.muted}>Nenhuma OS concluída ou entregue encontrada para essa placa ou proprietário.</Text> : null}
+      {!warrantySearch.trim() ? <Text style={styles.muted}>Pesquise pela placa, pelo proprietário, pelo CPF ou pelo número da OS para localizar uma OS concluída ou entregue.</Text> : null}
+      {warrantySearch.trim() && !matchingWarrantyOrders.length ? <Text style={styles.muted}>Nenhuma OS concluída ou entregue encontrada com esses dados.</Text> : null}
       {matchingWarrantyOrders.length > 30 ? <Text style={styles.muted}>Mostrando 30 resultados. Digite mais dados para refinar a pesquisa.</Text> : null}
       {!eligibleOrders.length ? <Text style={styles.muted}>Não há OS concluída ou entregue disponível para garantia.</Text> : null}
       <FormField label="Serviço coberto" required value={warrantyTitle} onChangeText={setWarrantyTitle} />
@@ -137,9 +138,9 @@ export default function AfterSalesScreen({ workshopId, workshopName }: { worksho
       <Pressable disabled={busy || !orderId} style={[styles.button, busy && styles.disabled]} onPress={addWarranty}><Text style={styles.buttonText}>Salvar garantia</Text></Pressable>
     </View> : null}
     <View style={styles.card}><Text style={styles.section}>Garantias</Text>
-      <FormField label="Pesquisar garantia por placa ou proprietário" value={warrantyRecordsSearch} onChangeText={setWarrantyRecordsSearch} placeholder="Digite a placa ou o nome do proprietário" />
+      <FormField label="Pesquisar garantia por placa, proprietário, CPF ou número da OS" value={warrantyRecordsSearch} onChangeText={setWarrantyRecordsSearch} placeholder="Digite a placa, o nome, o CPF ou a OS" />
       {matchingWarrantyRecords.map((warranty) => <View key={warranty.id} style={styles.listRow}><View style={styles.flex}><Text style={styles.itemTitle}>{warranty.description} · OS #{warranty.service_orders?.order_number}</Text><Text style={styles.muted}>{warranty.service_orders?.customers?.full_name} · {warranty.service_orders?.vehicles?.plate} · até {new Date(`${warranty.ends_on}T12:00:00`).toLocaleDateString('pt-BR')}</Text><Text style={styles.muted}>{warranty.voided_at ? 'Cancelada' : warranty.ends_on < today ? 'Vencida' : 'Vigente'}{warranty.conditions ? ` · ${warranty.conditions}` : ''}</Text></View></View>)}
-      {warranties.length > 0 && warrantyRecordsSearch.trim() && !matchingWarrantyRecords.length ? <Text style={styles.muted}>Nenhuma garantia encontrada para essa placa ou proprietário.</Text> : null}
+      {warranties.length > 0 && warrantyRecordsSearch.trim() && !matchingWarrantyRecords.length ? <Text style={styles.muted}>Nenhuma garantia encontrada com esses dados.</Text> : null}
       {!warranties.length ? <Text style={styles.muted}>Nenhuma garantia cadastrada.</Text> : null}
     </View>
   </ScrollView>;

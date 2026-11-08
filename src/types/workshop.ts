@@ -69,7 +69,7 @@ export type ServiceOrder = {
   items_subtotal: number | string;
   discount: number | string;
   total_amount: number | string;
-  customers?: { full_name: string } | null;
+  customers?: { full_name: string; document?: string | null } | null;
   vehicles?: { make: string; model: string; plate: string } | null;
 };
 export type ServiceOrderInput = Pick<ServiceOrder, 'customer_id' | 'vehicle_id' | 'assigned_membership_id' | 'odometer_km' | 'complaint' | 'diagnosis' | 'notes'>;
@@ -135,7 +135,7 @@ export type EstimateItemInput = Pick<EstimateItem, 'item_type' | 'description' |
 export type DashboardMetrics = { customers: number; vehicles: number; orders_open: number; orders_in_progress: number; orders_completed: number; estimates_pending: number; inventory_low: number; payables_pending: number };
 export type FinanceDashboardMetrics = { receivables_pending: number; receivables_overdue: number; received_this_month: number; expenses_this_month: number; profit_this_month: number; estimates_approved: number };
 export type MaintenanceReminder = { id: string; workshop_id: string; vehicle_id: string; customer_id: string; title: string; due_date: string | null; due_odometer_km: number | null; notes: string; completed_at: string | null; created_at: string; vehicles?: { make: string; model: string; plate: string } };
-export type ServiceWarranty = { id: string; workshop_id: string; service_order_id: string; description: string; starts_on: string; duration_days: number; ends_on: string; conditions: string; voided_at: string | null; created_at: string; service_orders?: { order_number: number; customers: { full_name: string }; vehicles: { make: string; model: string; plate: string } } };
+export type ServiceWarranty = { id: string; workshop_id: string; service_order_id: string; description: string; starts_on: string; duration_days: number; ends_on: string; conditions: string; voided_at: string | null; created_at: string; service_orders?: { order_number: number; customers: { full_name: string; document?: string | null }; vehicles: { make: string; model: string; plate: string } } };
 export type WorkshopEmployeePermission = { module: string; can_view: boolean; can_create: boolean; can_update: boolean; can_delete: boolean };
 export type WorkshopEmployee = { id: string; workshop_id: string; user_id: string; role: 'staff'; status: 'active' | 'disabled'; profiles: { full_name: string }; workshop_member_permissions: WorkshopEmployeePermission[]; labor_commission_rate?: number | string | null };
 export type ServiceOrderTimeEntry = { id: string; workshop_id: string; service_order_id: string; membership_id: string; started_at: string; ended_at: string | null };
