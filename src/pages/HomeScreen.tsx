@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, ScrollView, StatusBar, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import CustomersScreen from './CustomersScreen';
@@ -14,6 +14,7 @@ import FinanceScreen from './FinanceScreen';
 import WorkshopSettingsScreen from './WorkshopSettingsScreen';
 import ReportsScreen from './ReportsScreen';
 import DashboardOverview from '../components/DashboardOverview';
+import { useWorkshopLiveRefresh } from '../hooks/useWorkshopLiveRefresh';
 import { listCurrentWorkshops, getDashboardMetrics, getFinanceDashboardMetrics, getWorkshopPermissions, isPlatformAdministrator } from '../services/workshopData';
 import type { DashboardMetrics, FinanceDashboardMetrics, WorkshopContext, WorkshopPermissions } from '../types/workshop';
 
@@ -60,28 +61,41 @@ export default function HomeScreen({ onSignOut, initialTab = 'Início' }: { onSi
     if (!loading && permissions && activeTab === 'Pós-venda' && !permissions.after_sales?.view) setActiveTab('Início');
   }, [activeTab, loading, permissions]);
 
-  useEffect(() => {
-    let active = true;
-    setPermissions(null); setMetrics(null); setFinanceMetrics(null);
-    if (!workshop) return () => { active = false; };
-    getWorkshopPermissions(workshop.workshopId)
-      .then((access) => { if (active) setPermissions(access); })
-      .catch((reason: unknown) => { if (active) setLoadError(reason instanceof Error ? reason.message : 'Não foi possível carregar os dados da oficina.'); });
-    return () => { active = false; };
+  const refreshWorkshopContext = useCallback(async () => {
+    if (!workshop) return;
+    try {
+      const contexts = await listCurrentWorkshops();
+      setWorkshops(contexts);
+      const next = contexts.find((item) => item.workshopId === workshop.workshopId) ?? contexts[0] ?? null;
+      if (next?.workshopId !== workshop.workshopId || next?.workshopName !== workshop.workshopName || next?.role !== workshop.role) {
+        setMetrics(null); setFinanceMetrics(null); setWorkshop(next);
+      }
+      if (next) {
+        const access = await getWorkshopPermissions(next.workshopId);
+        setPermissions((current) => JSON.stringify(current) === JSON.stringify(access) ? current : access);
+      } else setPermissions(null);
+    } catch (reason: unknown) { setLoadError(reason instanceof Error ? reason.message : 'Não foi possível carregar os dados da oficina.'); }
   }, [workshop]);
 
   useEffect(() => {
+    setPermissions(null); setMetrics(null); setFinanceMetrics(null);
+    void refreshWorkshopContext();
+  }, [refreshWorkshopContext]);
+  useWorkshopLiveRefresh(workshop?.workshopId ?? '', ['workshop_memberships'], refreshWorkshopContext);
+
+  const refreshDashboard = useCallback(async () => {
     if (activeTab !== 'Início' || !workshop || !permissions?.dashboard.view) return;
-    let active = true;
-    Promise.all([
-      getDashboardMetrics(workshop.workshopId),
-      permissions.finance.view ? getFinanceDashboardMetrics(workshop.workshopId) : Promise.resolve(null),
-    ]).then(([dashboard, finance]) => {
-      if (!active) return;
+    try {
+      const [dashboard, finance] = await Promise.all([
+        getDashboardMetrics(workshop.workshopId),
+        permissions.finance.view ? getFinanceDashboardMetrics(workshop.workshopId) : Promise.resolve(null),
+      ]);
       setMetrics(dashboard); setFinanceMetrics(finance); setLoadError('');
-    }).catch((reason: unknown) => { if (active) setLoadError(reason instanceof Error ? reason.message : 'Não foi possível atualizar o painel da oficina.'); });
-    return () => { active = false; };
+    } catch (reason) { setLoadError(reason instanceof Error ? reason.message : 'Não foi possível atualizar o painel da oficina.'); }
   }, [activeTab, permissions, workshop]);
+
+  useEffect(() => { void refreshDashboard(); }, [refreshDashboard]);
+  useWorkshopLiveRefresh(workshop?.workshopId ?? '', ['customers', 'vehicles', 'service_orders', 'estimates', 'inventory_products', 'payables', 'financial_entries'], refreshDashboard, activeTab === 'Início');
 
   const visibleTabs: Tab[] = !workshop && platformAdmin ? ['Admin'] : [
     'Início',

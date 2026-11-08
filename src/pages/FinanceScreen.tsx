@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import FormField from '../components/FormField';
+import { useWorkshopLiveRefresh } from '../hooks/useWorkshopLiveRefresh';
 import { createFinancialEntry, getWorkshopPermissions, getWorkshopSettings, listCustomers, listFinancialEntries, listFinancialEntryReversals, listPayables, markPayablePaid, reverseFinancialEntry, settleFinancialEntry } from '../services/workshopData';
 import type { Customer, FinancialEntry, FinancialEntryReversal, Payable } from '../types/workshop';
 import { formatLocalDate } from '../utils/date';
@@ -44,6 +45,7 @@ export default function FinanceScreen({ workshopId }: { workshopId: string }) {
     finally { setLoading(false); }
   }, [workshopId]);
   useEffect(() => { refresh(); }, [refresh]);
+  useWorkshopLiveRefresh(workshopId, ['customers', 'vehicles', 'service_orders', 'financial_entries', 'financial_entry_reversals', 'payables', 'payable_payment_reversals'], refresh);
 
   const visible = useMemo(() => entries.filter((entry) => filter === 'all' || entry.entry_type === filter), [entries, filter]);
   const totals = useMemo(() => entries.reduce((summary, entry) => {

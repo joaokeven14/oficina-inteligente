@@ -18,6 +18,33 @@ function clientOrDefault(client?: SupabaseClient): SupabaseClient {
   return client ?? getSupabaseClient();
 }
 
+export type WorkshopLiveTable =
+  | 'customers' | 'vehicles' | 'service_orders' | 'service_order_items' | 'service_order_time_entries'
+  | 'service_order_inspection_items' | 'service_order_technical_notes' | 'service_order_authorizations' | 'service_order_attachments'
+  | 'inventory_products' | 'inventory_movements' | 'suppliers' | 'purchases' | 'purchase_items'
+  | 'payables' | 'payable_payment_reversals' | 'estimates' | 'estimate_items' | 'estimate_events'
+  | 'maintenance_reminders' | 'service_warranties' | 'financial_entries' | 'financial_entry_reversals'
+  | 'workshop_member_permissions' | 'workshop_memberships' | 'workshops';
+let nextLiveChannelId = 0;
+
+export function subscribeWorkshopLiveUpdates(
+  workshopId: string,
+  tables: readonly WorkshopLiveTable[],
+  onChange: () => void,
+  client?: SupabaseClient,
+): () => void {
+  const supabase = clientOrDefault(client);
+  const channel = supabase.channel(`workshop-live-${workshopId}-${++nextLiveChannelId}`);
+  for (const table of tables) {
+    const tenantColumn = table === 'workshops' ? 'id' : 'workshop_id';
+    channel.on('postgres_changes', {
+      event: '*', schema: 'public', table, filter: `${tenantColumn}=eq.${workshopId}`,
+    }, onChange);
+  }
+  channel.subscribe();
+  return () => { void supabase.removeChannel(channel); };
+}
+
 async function edgeFunctionErrorMessage(error: unknown, fallback: string): Promise<string> {
   const response = (error as { context?: Response } | null)?.context;
   if (response && typeof response.clone === 'function') {
@@ -196,7 +223,7 @@ export async function listVehicles(workshopId: string, client?: SupabaseClient):
   const supabase = clientOrDefault(client);
   const data = await fetchAllPages((from, to) => supabase
     .from('vehicles')
-    .select('id, workshop_id, customer_id, vehicle_type, make, model, year_manufacture, model_year, plate, color, mileage_km, fuel, chassis, notes, created_at, updated_at, customers!inner(full_name)')
+    .select('id, workshop_id, customer_id, vehicle_type, make, model, year_manufacture, model_year, plate, color, mileage_km, fuel, chassis, notes, created_at, updated_at, customers(full_name)')
     .eq('workshop_id', workshopId)
     .is('archived_at', null)
     .order('plate', { ascending: true }).order('id', { ascending: true }).range(from, to));
@@ -237,7 +264,7 @@ export async function listServiceOrders(workshopId: string, client?: SupabaseCli
   const customerFields = includeCustomerDocument ? 'full_name, document' : 'full_name';
   const data = await fetchAllPages((from, to) => supabase
     .from('service_orders')
-    .select(`id, workshop_id, order_number, customer_id, vehicle_id, assigned_membership_id, status, opened_at, completed_at, odometer_km, complaint, diagnosis, notes, items_subtotal, discount, total_amount, customers!inner(${customerFields}), vehicles!inner(make, model, plate)`)
+    .select(`id, workshop_id, order_number, customer_id, vehicle_id, assigned_membership_id, status, opened_at, completed_at, odometer_km, complaint, diagnosis, notes, items_subtotal, discount, total_amount, customers(${customerFields}), vehicles(make, model, plate)`)
     .eq('workshop_id', workshopId)
     .order('opened_at', { ascending: false }).order('id', { ascending: true }).range(from, to));
   return data as unknown as ServiceOrder[];

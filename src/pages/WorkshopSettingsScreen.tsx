@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Image, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { launchImageLibrary } from 'react-native-image-picker';
 import FormField from '../components/FormField';
+import { useWorkshopLiveRefresh } from '../hooks/useWorkshopLiveRefresh';
 import { getWorkshopSettings, removeWorkshopLogo, saveWorkshopSettings, uploadWorkshopLogo } from '../services/workshopData';
 import type { WorkshopSettings } from '../types/workshop';
 
@@ -19,6 +20,7 @@ export default function WorkshopSettingsScreen({ workshopId, isOwner }: { worksh
     finally { setLoading(false); }
   }, [workshopId]);
   useEffect(() => { refresh(); }, [refresh]);
+  useWorkshopLiveRefresh(workshopId, ['workshops'], refresh);
 
   const change = (field: keyof WorkshopSettings, value: string) => {
     if (!settings) return;

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import FormField from './FormField';
+import { useWorkshopLiveRefresh } from '../hooks/useWorkshopLiveRefresh';
 import { listEstimates, listFinancialEntries, listMaintenanceReminders, listPayables, listServiceOrders } from '../services/workshopData';
 import type { Estimate, FinancialEntry, MaintenanceReminder, Payable, ServiceOrder, WorkshopPermissions } from '../types/workshop';
 import { formatLocalDate } from '../utils/date';
@@ -26,6 +27,7 @@ export default function DashboardOverview({ workshopId, permissions, onOpenAfter
   const [error, setError] = useState('');
   const [dateError, setDateError] = useState('');
   const [reload, setReload] = useState(0);
+  const refreshFromRealtime = useCallback(async () => { setReload((current) => current + 1); }, []);
 
   useEffect(() => {
     let active = true;
@@ -46,6 +48,7 @@ export default function DashboardOverview({ workshopId, permissions, onOpenAfter
     if (permissions.dashboard.view) load(); else setLoading(false);
     return () => { active = false; };
   }, [workshopId, permissions, reload]);
+  useWorkshopLiveRefresh(workshopId, ['customers', 'vehicles', 'service_orders', 'service_order_items', 'financial_entries', 'payables', 'estimates', 'estimate_items', 'maintenance_reminders'], refreshFromRealtime);
 
   const selectPeriod = useCallback((next: Period) => {
     const today = new Date(); const start = new Date(today);

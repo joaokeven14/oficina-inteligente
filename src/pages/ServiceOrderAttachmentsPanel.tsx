@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Alert, Image, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { launchImageLibrary } from 'react-native-image-picker';
 import FormField from '../components/FormField';
+import { useWorkshopLiveRefresh } from '../hooks/useWorkshopLiveRefresh';
 import { listServiceOrderAttachments, removeServiceOrderPhoto, uploadServiceOrderPhoto } from '../services/workshopData';
 import type { ServiceOrderAttachment } from '../types/workshop';
 
@@ -17,6 +18,7 @@ export default function ServiceOrderAttachmentsPanel({ workshopId, orderId, canM
     finally { setLoading(false); }
   }, [workshopId, orderId]);
   useEffect(() => { refresh(); }, [refresh]);
+  useWorkshopLiveRefresh(workshopId, ['service_order_attachments'], refresh);
 
   const addPhoto = async () => {
     if (Platform.OS === 'windows') { setError('Para enviar fotos pelo aplicativo de computador, use a versão aberta no navegador.'); return; }

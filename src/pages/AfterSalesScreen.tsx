@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import FormField from '../components/FormField';
+import { useWorkshopLiveRefresh } from '../hooks/useWorkshopLiveRefresh';
 import { completeMaintenanceReminder, createMaintenanceReminder, createServiceWarranty, getWorkshopPermissions, getWorkshopSettings, listMaintenanceReminders, listServiceOrderItems, listServiceOrders, listServiceWarranties, listVehicles } from '../services/workshopData';
 import type { MaintenanceReminder, ServiceOrder, ServiceWarranty, Vehicle } from '../types/workshop';
 import { formatLocalDate } from '../utils/date';
@@ -50,6 +51,7 @@ export default function AfterSalesScreen({ workshopId, workshopName }: { worksho
     finally { setLoading(false); }
   }, [workshopId]);
   useEffect(() => { refresh(); }, [refresh]);
+  useWorkshopLiveRefresh(workshopId, ['customers', 'vehicles', 'service_orders', 'maintenance_reminders', 'service_warranties'], refresh);
   const eligibleOrders = useMemo(() => orders.filter((order) => order.status === 'completed' || order.status === 'delivered'), [orders]);
   const matchingWarrantyOrders = useMemo(() => {
     const query = searchKey(warrantySearch);

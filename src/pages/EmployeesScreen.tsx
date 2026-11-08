@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import FormField from '../components/FormField';
+import { useWorkshopLiveRefresh } from '../hooks/useWorkshopLiveRefresh';
 import { deleteWorkshopEmployee, getWorkshopPermissions, inviteWorkshopEmployee, listWorkshopEmployees, saveWorkshopEmployeePermissions, setWorkshopEmployeeStatus } from '../services/workshopData';
 import type { ModulePermissions, WorkshopEmployee } from '../types/workshop';
 
@@ -35,6 +36,7 @@ export default function EmployeesScreen({ workshopId, isOwner }: { workshopId: s
     finally { setLoading(false); }
   }, [workshopId]);
   useEffect(() => { refresh(); }, [refresh]);
+  useWorkshopLiveRefresh(workshopId, ['workshop_memberships', 'workshop_member_permissions'], refresh);
 
   const editPermissions = (employee: WorkshopEmployee) => {
     const current = emptyPermissions();

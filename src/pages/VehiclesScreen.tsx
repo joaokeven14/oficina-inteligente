@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import FormField from '../components/FormField';
+import { useWorkshopLiveRefresh } from '../hooks/useWorkshopLiveRefresh';
 import { archiveVehicle, getWorkshopPermissions, listCustomers, listVehicles, saveVehicle } from '../services/workshopData';
 import { listVehicleBrands, listVehicleModels, listVehicleYears, vehicleBrandKey, type VehicleCatalogOption, type VehicleCatalogType } from '../services/vehicleCatalog';
 import type { Customer, ModulePermissions, Vehicle, VehicleInput } from '../types/workshop';
@@ -77,6 +78,7 @@ export default function VehiclesScreen({ workshopId }: { workshopId: string }) {
   }, [workshopId]);
 
   useEffect(() => { refresh(); }, [refresh]);
+  useWorkshopLiveRefresh(workshopId, ['customers', 'vehicles'], refresh);
 
   useEffect(() => {
     if (!isFormOpen) return undefined;

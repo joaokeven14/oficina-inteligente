@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import FormField from '../components/FormField';
+import { useWorkshopLiveRefresh } from '../hooks/useWorkshopLiveRefresh';
 import { archiveSupplier, createPurchase, getWorkshopPermissions, listInventoryProducts, listPayablePaymentReversals, listPayables, listPurchases, listSuppliers, markPayablePaid, receivePurchase, reversePayablePayment, saveSupplier } from '../services/workshopData';
 import type { InventoryProduct, Payable, PayablePaymentReversal, Purchase, Supplier } from '../types/workshop';
 import { paymentMethodLabel, paymentMethods } from '../utils/paymentMethods';
@@ -78,6 +79,7 @@ export default function PurchasesScreen({ workshopId }: { workshopId: string }) 
     finally { setLoading(false); }
   }, [workshopId]);
   useEffect(() => { refresh(); }, [refresh]);
+  useWorkshopLiveRefresh(workshopId, ['suppliers', 'inventory_products', 'inventory_movements', 'purchases', 'purchase_items', 'payables', 'payable_payment_reversals'], refresh);
 
   const selectedSupplier = suppliers.find((supplier) => supplier.id === supplierId) ?? null;
   const selectedProduct = products.find((product) => product.id === productId) ?? null;

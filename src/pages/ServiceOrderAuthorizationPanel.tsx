@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import FormField from '../components/FormField';
+import { useWorkshopLiveRefresh } from '../hooks/useWorkshopLiveRefresh';
 import { createServiceOrderAuthorization, listServiceOrderAuthorizations } from '../services/workshopData';
 import type { ServiceOrderAuthorization, SignaturePoint } from '../types/workshop';
 
@@ -42,6 +43,7 @@ export default function ServiceOrderAuthorizationPanel({ workshopId, orderId, cu
     finally { setLoading(false); }
   }, [workshopId, orderId]);
   useEffect(() => { refresh(); }, [refresh]);
+  useWorkshopLiveRefresh(workshopId, ['service_order_authorizations'], refresh);
 
   const recordPoint = (x: number, y: number, start: boolean) => {
     if (!canvasSize.width || !canvasSize.height) return;

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import FormField from '../components/FormField';
+import { useWorkshopLiveRefresh } from '../hooks/useWorkshopLiveRefresh';
 import { convertEstimate, createEstimate, getWorkshopPermissions, getWorkshopSettings, listCustomers, listEstimateItems, listEstimates, listVehicles, reviewEstimate } from '../services/workshopData';
 import type { Customer, Estimate, EstimateItemInput, Vehicle } from '../types/workshop';
 import { formatLocalDate } from '../utils/date';
@@ -37,6 +38,7 @@ export default function EstimatesScreen({ workshopId }: { workshopId: string }) 
     finally { setLoading(false); }
   }, [workshopId]);
   useEffect(() => { refresh(); }, [refresh]);
+  useWorkshopLiveRefresh(workshopId, ['customers', 'vehicles', 'estimates', 'estimate_items', 'estimate_events'], refresh);
   const availableVehicles = useMemo(() => vehicles.filter((vehicle) => vehicle.customer_id === customerId), [vehicles, customerId]);
   const subtotal = items.reduce((sum, item) => sum + Number(item.quantity) * Number(item.unit_price), 0);
   const total = Math.max(0, subtotal - Number(discount.replace(',', '.')) || 0);

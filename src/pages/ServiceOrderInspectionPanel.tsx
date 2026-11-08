@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import FormField from '../components/FormField';
+import { useWorkshopLiveRefresh } from '../hooks/useWorkshopLiveRefresh';
 import { addServiceOrderTechnicalNote, listServiceOrderInspection, listServiceOrderTechnicalNotes, saveServiceOrderInspectionItem } from '../services/workshopData';
 import type { ServiceOrderInspectionItem, ServiceOrderTechnicalNote } from '../types/workshop';
 
@@ -35,6 +36,7 @@ export default function ServiceOrderInspectionPanel({ workshopId, orderId, canUp
     finally { setLoading(false); }
   }, [workshopId, orderId]);
   useEffect(() => { refresh(); }, [refresh]);
+  useWorkshopLiveRefresh(workshopId, ['service_order_inspection_items', 'service_order_technical_notes'], refresh);
 
   const save = async (item: ServiceOrderInspectionItem) => {
     setBusyId(item.id); setError('');

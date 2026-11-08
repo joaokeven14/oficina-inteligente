@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import FormField from '../components/FormField';
+import { useWorkshopLiveRefresh } from '../hooks/useWorkshopLiveRefresh';
 import { archiveCustomer, getWorkshopPermissions, listCustomers, saveCustomer } from '../services/workshopData';
 import type { Customer, CustomerInput, ModulePermissions } from '../types/workshop';
 
@@ -36,6 +37,7 @@ export default function CustomersScreen({ workshopId }: { workshopId: string }) 
   }, [workshopId]);
 
   useEffect(() => { refresh(); }, [refresh]);
+  useWorkshopLiveRefresh(workshopId, ['customers'], refresh);
 
   const visible = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase('pt-BR');

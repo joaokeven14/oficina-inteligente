@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Platform, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
 import FormField from '../components/FormField';
+import { useWorkshopLiveRefresh } from '../hooks/useWorkshopLiveRefresh';
 import { getEmployeeProductivity, getWorkshopPermissions, getWorkshopSettings, listCustomers, listEstimates, listFinancialEntries, listInventoryProducts, listMaintenanceReminders, listPayables, listPurchases, listServiceOrders, listServiceWarranties, listVehicles, listWorkshopEmployees } from '../services/workshopData';
 import type { Customer, EmployeeProductivity, Estimate, FinancialEntry, InventoryProduct, MaintenanceReminder, Payable, Purchase, ServiceOrder, ServiceWarranty, Vehicle, WorkshopEmployee } from '../types/workshop';
 import { formatLocalDate } from '../utils/date';
@@ -19,6 +20,7 @@ export default function ReportsScreen({ workshopId, workshopName, isOwner }: { w
   const [to, setTo] = useState(dateValue(today));
   const [data, setData] = useState<Data | null>(null);
   const [productivity, setProductivity] = useState<EmployeeProductivity[]>([]);
+  const [productivityRequested, setProductivityRequested] = useState(false);
   const [canLoadProductivity, setCanLoadProductivity] = useState(false);
   const [canViewAfterSales, setCanViewAfterSales] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -49,13 +51,21 @@ export default function ReportsScreen({ workshopId, workshopName, isOwner }: { w
     finally { setLoading(false); }
   }, [workshopId, isOwner]);
   useEffect(() => { refresh(); }, [refresh]);
+  useWorkshopLiveRefresh(workshopId, ['customers', 'vehicles', 'service_orders', 'service_order_items', 'estimates', 'estimate_items', 'inventory_products', 'inventory_movements', 'suppliers', 'purchases', 'purchase_items', 'financial_entries', 'financial_entry_reversals', 'payables', 'payable_payment_reversals', 'maintenance_reminders', 'service_warranties'], refresh);
 
-  const loadProductivity = async () => {
+  const loadProductivity = useCallback(async () => {
     setBusy(true); setError('');
-    try { setProductivity(await getEmployeeProductivity(workshopId, from, to)); }
+    try { setProductivity(await getEmployeeProductivity(workshopId, from, to)); setProductivityRequested(true); }
     catch (reason) { setError(reason instanceof Error ? reason.message : 'Não foi possível carregar a produtividade.'); }
     finally { setBusy(false); }
-  };
+  }, [from, to, workshopId]);
+
+  const refreshProductivity = useCallback(async () => {
+    if (!productivityRequested || !canLoadProductivity) return;
+    try { setProductivity(await getEmployeeProductivity(workshopId, from, to)); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : 'Não foi possível atualizar a produtividade.'); }
+  }, [canLoadProductivity, from, productivityRequested, to, workshopId]);
+  useWorkshopLiveRefresh(workshopId, ['service_order_time_entries'], refreshProductivity, productivityRequested && canLoadProductivity);
 
   const report = useMemo(() => {
     if (!data) return [] as Array<[string, string]>;

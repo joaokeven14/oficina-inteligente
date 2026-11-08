@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import FormField from '../components/FormField';
+import { useWorkshopLiveRefresh } from '../hooks/useWorkshopLiveRefresh';
 import ServiceOrderInspectionPanel from './ServiceOrderInspectionPanel';
 import ServiceOrderAuthorizationPanel from './ServiceOrderAuthorizationPanel';
 import ServiceOrderAttachmentsPanel from './ServiceOrderAttachmentsPanel';
@@ -95,6 +96,14 @@ export default function ServiceOrdersScreen({ workshopId }: { workshopId: string
   }, [workshopId]);
 
   useEffect(() => { refresh(); }, [refresh]);
+  useWorkshopLiveRefresh(workshopId, ['customers', 'vehicles', 'service_orders', 'service_order_items', 'inventory_products'], refresh);
+
+  const refreshActiveTimer = useCallback(async () => {
+    if (!selectedOrder) return;
+    try { setActiveTimer(await getMyActiveServiceOrderTimer(workshopId, selectedOrder.id)); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : 'Não foi possível atualizar o cronômetro.'); }
+  }, [selectedOrder, workshopId]);
+  useWorkshopLiveRefresh(workshopId, ['service_order_time_entries'], refreshActiveTimer, Boolean(selectedOrder));
 
   useEffect(() => {
     let active = true;

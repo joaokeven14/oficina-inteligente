@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import FormField from '../components/FormField';
+import { useWorkshopLiveRefresh } from '../hooks/useWorkshopLiveRefresh';
 import {
   archiveInventoryProduct,
   getWorkshopPermissions,
@@ -45,6 +46,7 @@ export default function InventoryScreen({ workshopId }: { workshopId: string }) 
   }, [workshopId]);
 
   useEffect(() => { refresh(); }, [refresh]);
+  useWorkshopLiveRefresh(workshopId, ['inventory_products', 'inventory_movements'], refresh);
 
   useEffect(() => {
     let active = true;
