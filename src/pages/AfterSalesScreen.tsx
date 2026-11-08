@@ -12,6 +12,7 @@ export default function AfterSalesScreen({ workshopId, workshopName }: { worksho
   const [warranties, setWarranties] = useState<ServiceWarranty[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [orders, setOrders] = useState<ServiceOrder[]>([]);
+  const [canView, setCanView] = useState(false);
   const [canCreate, setCanCreate] = useState(false);
   const [canUpdate, setCanUpdate] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -27,11 +28,17 @@ export default function AfterSalesScreen({ workshopId, workshopName }: { worksho
   const [conditions, setConditions] = useState('');
   const refresh = useCallback(async () => {
     try {
-      const [reminderRows, warrantyRows, vehicleRows, orderRows, permissions] = await Promise.all([
-        listMaintenanceReminders(workshopId), listServiceWarranties(workshopId), listVehicles(workshopId), listServiceOrders(workshopId), getWorkshopPermissions(workshopId),
+      const permissions = await getWorkshopPermissions(workshopId);
+      const access = permissions.after_sales ?? { view: false, create: false, update: false, delete: false };
+      setCanView(access.view); setCanCreate(access.create); setCanUpdate(access.update);
+      if (!access.view) {
+        setReminders([]); setWarranties([]); setVehicles([]); setOrders([]);
+        return;
+      }
+      const [reminderRows, warrantyRows, vehicleRows, orderRows] = await Promise.all([
+        listMaintenanceReminders(workshopId), listServiceWarranties(workshopId), listVehicles(workshopId), listServiceOrders(workshopId),
       ]);
       setReminders(reminderRows); setWarranties(warrantyRows); setVehicles(vehicleRows); setOrders(orderRows);
-      setCanCreate(permissions.service_orders.create); setCanUpdate(permissions.service_orders.update);
       setVehicleId((current) => current || vehicleRows[0]?.id || '');
       setOrderId((current) => current || orderRows.find((order) => order.status === 'completed' || order.status === 'delivered')?.id || '');
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Não foi possível carregar garantias e lembretes.'); }
@@ -79,6 +86,7 @@ export default function AfterSalesScreen({ workshopId, workshopName }: { worksho
     finally { setBusy(false); }
   };
   if (loading) return <ActivityIndicator style={styles.loading} color="#e97824" />;
+  if (!canView) return <View style={styles.page}><Text style={styles.title}>Pós-venda</Text><Text style={styles.error}>O proprietário ainda não autorizou seu acesso a esta área.</Text></View>;
   return <ScrollView contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
     <Text style={styles.title}>Pós-venda</Text><Text style={styles.subtitle}>Garantias de OS concluídas e lembretes de manutenção por veículo.</Text>
     {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
@@ -96,7 +104,7 @@ export default function AfterSalesScreen({ workshopId, workshopName }: { worksho
       {vehicles.map((vehicle) => <View key={vehicle.id} style={styles.listRow}><View style={styles.flex}><Text style={styles.itemTitle}>{vehicle.make} {vehicle.model} · {vehicle.plate}</Text><Text style={styles.muted}>{vehicle.customers?.full_name ?? 'Cliente'}</Text></View><Pressable accessibilityRole="button" accessibilityLabel={`Gerar histórico ${vehicle.plate}`} disabled={busy} style={styles.smallButton} onPress={() => { printVehicleHistory(vehicle).catch(() => undefined); }}><Text style={styles.buttonText}>{Platform.OS === 'web' ? 'PDF' : 'Compartilhar'}</Text></Pressable></View>)}
       {!vehicles.length ? <Text style={styles.muted}>Cadastre veículos para consultar seus históricos.</Text> : null}
     </View>
-    {canUpdate ? <View style={styles.card}><Text style={styles.section}>Registrar garantia</Text>
+    {canCreate ? <View style={styles.card}><Text style={styles.section}>Registrar garantia</Text>
       <Text style={styles.label}>Ordem concluída ou entregue</Text><View style={styles.chips}>{eligibleOrders.map((order) => <Pressable key={order.id} style={[styles.chip, orderId === order.id && styles.active]} onPress={() => setOrderId(order.id)}><Text style={styles.chipText}>OS #{order.order_number} · {order.vehicles?.plate}</Text></Pressable>)}</View>
       <FormField label="Serviço coberto" required value={warrantyTitle} onChangeText={setWarrantyTitle} />
       <View style={styles.row}><View style={styles.half}><FormField label="Prazo (dias)" required value={days} onChangeText={setDays} keyboardType="number-pad" /></View><View style={styles.half}><Text style={styles.label}>Início</Text><Text style={styles.itemTitle}>{new Date(`${today}T12:00:00`).toLocaleDateString('pt-BR')}</Text></View></View>

@@ -20,6 +20,7 @@ export default function ReportsScreen({ workshopId, workshopName, isOwner }: { w
   const [data, setData] = useState<Data | null>(null);
   const [productivity, setProductivity] = useState<EmployeeProductivity[]>([]);
   const [canLoadProductivity, setCanLoadProductivity] = useState(false);
+  const [canViewAfterSales, setCanViewAfterSales] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -28,6 +29,7 @@ export default function ReportsScreen({ workshopId, workshopName, isOwner }: { w
   const refresh = useCallback(async () => {
     try {
       const permissions = await getWorkshopPermissions(workshopId);
+      setCanViewAfterSales(permissions.after_sales?.view ?? false);
       const [customers, vehicles, orders, estimates, stock, purchases, entries, payables, reminders, warranties, employees] = await Promise.all([
         permissions.clients.view ? listCustomers(workshopId) : Promise.resolve([]),
         permissions.vehicles.view ? listVehicles(workshopId) : Promise.resolve([]),
@@ -37,8 +39,8 @@ export default function ReportsScreen({ workshopId, workshopName, isOwner }: { w
         permissions.inventory.view ? listPurchases(workshopId) : Promise.resolve([]),
         permissions.finance.view ? listFinancialEntries(workshopId) : Promise.resolve([]),
         permissions.finance.view ? listPayables(workshopId) : Promise.resolve([]),
-        permissions.service_orders.view ? listMaintenanceReminders(workshopId) : Promise.resolve([]),
-        permissions.service_orders.view ? listServiceWarranties(workshopId) : Promise.resolve([]),
+        permissions.after_sales?.view ? listMaintenanceReminders(workshopId) : Promise.resolve([]),
+        permissions.after_sales?.view ? listServiceWarranties(workshopId) : Promise.resolve([]),
         permissions.employees.view ? listWorkshopEmployees(workshopId) : Promise.resolve([]),
       ]);
       setData({ customers, vehicles, orders, estimates, stock, purchases, entries, payables, reminders, warranties, employees });
@@ -84,8 +86,8 @@ export default function ReportsScreen({ workshopId, workshopName, isOwner }: { w
       ['Estoque a custo', money(data.stock.reduce((sum, product) => sum + Number(product.quantity) * Number(product.cost_price), 0))],
       ['Compras recebidas no período', String(data.purchases.filter((purchase) => purchase.status === 'received' && within(purchase.received_at)).length)],
       ['Recebido no período', money(received)], ['Despesas pagas no período', money(paidExpenses)], ['Resultado realizado no período', money(received - paidExpenses)],
-      ['Contas pendentes', money(pending)], ['Garantias vigentes', String(data.warranties.filter((item) => !item.voided_at && item.ends_on >= dateValue(new Date())).length)],
-      ['Lembretes nos próximos 30 dias', String(upcomingReminders.length)],
+      ['Contas pendentes', money(pending)],
+      ...(canViewAfterSales ? [['Garantias vigentes', String(data.warranties.filter((item) => !item.voided_at && item.ends_on >= dateValue(new Date())).length)], ['Lembretes nos próximos 30 dias', String(upcomingReminders.length)]] as Array<[string, string]> : []),
       ...employeeMetrics,
       ...productivity.flatMap((employee) => [
         [`Tempo registrado de ${employee.full_name}`, `${Math.round(Number(employee.minutes_logged))} min`],
@@ -93,7 +95,7 @@ export default function ReportsScreen({ workshopId, workshopName, isOwner }: { w
         [`Comissão estimada de ${employee.full_name}`, `${employee.commission_rate}% · ${money(Number(employee.estimated_commission))}`],
       ]) as Array<[string, string]>,
     ];
-  }, [data, from, to, productivity]);
+  }, [data, from, to, productivity, canViewAfterSales]);
 
   const financeBreakdown = useMemo(() => {
     if (!data) return { categories: [] as Array<{ name: string; income: number; expense: number }>, months: [] as Array<{ label: string; income: number; expense: number }> };

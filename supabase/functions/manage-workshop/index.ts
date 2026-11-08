@@ -6,7 +6,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
-const modules = ['dashboard', 'clients', 'vehicles', 'service_orders', 'estimates', 'inventory', 'purchases', 'finance', 'reports', 'employees', 'settings'];
+const modules = ['dashboard', 'clients', 'vehicles', 'service_orders', 'after_sales', 'estimates', 'inventory', 'purchases', 'finance', 'reports', 'employees', 'settings'];
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 const validId = (value: unknown) => typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 

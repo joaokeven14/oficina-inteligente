@@ -9,7 +9,7 @@ export type WorkshopSettings = { id: string; name: string; logo_path: string | n
 export type WorkshopSettingsInput = Omit<WorkshopSettings, 'id' | 'logo_path' | 'logo_url'>;
 
 export type ModulePermissions = { view: boolean; create: boolean; update: boolean; delete: boolean };
-export type WorkshopPermissions = Record<'dashboard' | 'clients' | 'vehicles' | 'service_orders' | 'inventory' | 'finance' | 'estimates' | 'employees' | 'reports' | 'settings', ModulePermissions> & { purchases?: ModulePermissions };
+export type WorkshopPermissions = Record<'dashboard' | 'clients' | 'vehicles' | 'service_orders' | 'inventory' | 'finance' | 'estimates' | 'employees' | 'reports' | 'settings', ModulePermissions> & { purchases?: ModulePermissions; after_sales?: ModulePermissions };
 
 export type Customer = {
   id: string;

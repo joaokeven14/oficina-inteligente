@@ -136,6 +136,7 @@ export async function getWorkshopPermissions(workshopId: string, client?: Supaba
     service_orders: { view: false, create: false, update: false, delete: false },
     inventory: { view: false, create: false, update: false, delete: false },
     purchases: { view: false, create: false, update: false, delete: false },
+    after_sales: { view: false, create: false, update: false, delete: false },
     finance: { view: false, create: false, update: false, delete: false },
     estimates: { view: false, create: false, update: false, delete: false },
     dashboard: { view: false, create: false, update: false, delete: false },

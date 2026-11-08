@@ -5,7 +5,7 @@ import { deleteWorkshopEmployee, getWorkshopPermissions, inviteWorkshopEmployee,
 import type { ModulePermissions, WorkshopEmployee } from '../types/workshop';
 
 const modules = [
-  ['dashboard', 'Painel'], ['clients', 'Clientes'], ['vehicles', 'Veículos'], ['service_orders', 'Ordens de serviço'], ['estimates', 'Orçamentos'],
+  ['dashboard', 'Painel'], ['clients', 'Clientes'], ['vehicles', 'Veículos'], ['service_orders', 'Ordens de serviço'], ['after_sales', 'Pós-venda'], ['estimates', 'Orçamentos'],
   ['inventory', 'Estoque'], ['purchases', 'Compras'], ['finance', 'Financeiro'], ['reports', 'Relatórios'], ['employees', 'Funcionários'], ['settings', 'Configurações'],
 ] as const;
 const emptyPermissions = (): Record<string, ModulePermissions> => Object.fromEntries(modules.map(([module]) => [module, { view: false, create: false, update: false, delete: false }]));
@@ -108,7 +108,7 @@ export default function EmployeesScreen({ workshopId, isOwner }: { workshopId: s
             const enabled = permissions[module]?.[key] ?? false;
             return <Pressable key={key} accessibilityRole="checkbox" accessibilityState={{ checked: enabled }} style={[styles.permissionToggle, enabled && styles.permissionToggleOn]} onPress={() => toggle(module,key)}><Text style={[styles.toggleText,enabled && styles.toggleTextOn]}>{enabled ? '✓' : '—'}</Text></Pressable>;
           })}</View>)}
-          <Text style={styles.muted}>Compras começa sem acesso. Somente o proprietário pode liberar essa área. Para receber uma compra, também conceda “Criar” em Estoque.</Text>
+          <Text style={styles.muted}>Pós-venda e Compras têm permissões próprias. Somente o proprietário pode liberar essas áreas; Compras também começa sem acesso. Para receber compras, conceda “Criar” em Estoque.</Text>
           <Text style={styles.muted}>Administradores da plataforma e proprietários da oficina não podem ser criados como funcionários por esta tela.</Text>
           <Pressable disabled={busy || (!selected && (!fullName.trim() || !email.trim()))} style={[styles.primary, styles.saveButton, busy && styles.disabled]} onPress={() => { save(); }}><Text style={styles.primaryText}>{busy ? 'Salvando…' : selected ? 'Salvar permissões' : 'Enviar convite'}</Text></Pressable>
         </ScrollView>

@@ -41,6 +41,17 @@ test('does not request or display dashboard metrics without permission', async (
   expect(metrics).not.toHaveBeenCalled();
 });
 
+test('does not show after-sales when only service orders are authorized', async () => {
+  current.mockResolvedValue([{ workshopId: 'w1', workshopName: 'Oficina Sul', role: 'staff' }]);
+  isAdmin.mockResolvedValue(false);
+  permissions.mockResolvedValue({ ...noAccess, service_orders: { view: true, create: false, update: false, delete: false } });
+  let screen: ReactTestRenderer.ReactTestRenderer;
+  await ReactTestRenderer.act(async () => { screen = ReactTestRenderer.create(<HomeScreen onSignOut={() => undefined} />); await new Promise<void>((resolve) => setImmediate(resolve)); });
+  const output = JSON.stringify(screen!.toJSON());
+  expect(output).toContain('Ordens');
+  expect(output).not.toContain('Pós-venda');
+});
+
 test('lets a user switch between the workshops linked to the account', async () => {
   current.mockResolvedValue([
     { workshopId: 'w1', workshopName: 'Oficina Sul', role: 'owner' },

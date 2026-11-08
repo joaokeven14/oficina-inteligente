@@ -53,7 +53,11 @@ export default function HomeScreen({ onSignOut, initialTab = 'Início' }: { onSi
   }, [activeTab, loading, platformAdmin]);
 
   useEffect(() => {
-    if (!loading && activeTab === 'Compras' && !permissions?.purchases?.view) setActiveTab('Início');
+    if (!loading && permissions && activeTab === 'Compras' && !permissions.purchases?.view) setActiveTab('Início');
+  }, [activeTab, loading, permissions]);
+
+  useEffect(() => {
+    if (!loading && permissions && activeTab === 'Pós-venda' && !permissions.after_sales?.view) setActiveTab('Início');
   }, [activeTab, loading, permissions]);
 
   useEffect(() => {
@@ -82,7 +86,7 @@ export default function HomeScreen({ onSignOut, initialTab = 'Início' }: { onSi
     ...(permissions?.purchases?.view ? ['Compras' as const] : []),
     ...(permissions?.finance.view ? ['Financeiro' as const] : []),
     ...(permissions?.estimates.view ? ['Orçamentos' as const] : []),
-    ...(permissions?.service_orders.view ? ['Pós-venda' as const] : []),
+    ...(permissions?.after_sales?.view ? ['Pós-venda' as const] : []),
     ...(permissions?.employees.view ? ['Funcionários' as const] : []),
     ...(permissions?.reports.view ? ['Relatórios' as const] : []),
     ...(permissions?.settings.view ? ['Configurações' as const] : []),

@@ -13,7 +13,7 @@ beforeEach(() => { jest.clearAllMocks(); });
 
 test('builds reports from current persisted workshop data', async () => {
   const allow = { view: true, create: true, update: true, delete: true };
-  jest.mocked(getWorkshopPermissions).mockResolvedValue({ dashboard: allow, clients: allow, vehicles: allow, service_orders: allow, estimates: allow, inventory: allow, finance: allow, employees: allow, reports: allow, settings: allow });
+  jest.mocked(getWorkshopPermissions).mockResolvedValue({ dashboard: allow, clients: allow, vehicles: allow, service_orders: allow, after_sales: allow, estimates: allow, inventory: allow, finance: allow, employees: allow, reports: allow, settings: allow });
   jest.mocked(listCustomers).mockResolvedValue([{ id: 'c1', workshop_id: 'w1', full_name: 'Ana Silva', document: null, phone: null, whatsapp: null, email: null, address: null, city: null, state: null, notes: null, created_at: '', updated_at: '' }]);
   jest.mocked(listVehicles).mockResolvedValue([]); jest.mocked(listServiceOrders).mockResolvedValue([]); jest.mocked(listEstimates).mockResolvedValue([]); jest.mocked(listInventoryProducts).mockResolvedValue([]); jest.mocked(listPurchases).mockResolvedValue([]);
   jest.mocked(listFinancialEntries).mockResolvedValue([
@@ -39,7 +39,7 @@ test('builds reports from current persisted workshop data', async () => {
 
 test('loads time tracking and estimated commissions only on the owner request', async () => {
   const allow = { view: true, create: true, update: true, delete: true };
-  jest.mocked(getWorkshopPermissions).mockResolvedValue({ dashboard: allow, clients: allow, vehicles: allow, service_orders: allow, estimates: allow, inventory: allow, finance: allow, employees: allow, reports: allow, settings: allow });
+  jest.mocked(getWorkshopPermissions).mockResolvedValue({ dashboard: allow, clients: allow, vehicles: allow, service_orders: allow, after_sales: allow, estimates: allow, inventory: allow, finance: allow, employees: allow, reports: allow, settings: allow });
   jest.mocked(listCustomers).mockResolvedValue([]); jest.mocked(listVehicles).mockResolvedValue([]); jest.mocked(listServiceOrders).mockResolvedValue([]); jest.mocked(listEstimates).mockResolvedValue([]); jest.mocked(listInventoryProducts).mockResolvedValue([]); jest.mocked(listPurchases).mockResolvedValue([]); jest.mocked(listFinancialEntries).mockResolvedValue([]); jest.mocked(listPayables).mockResolvedValue([]); jest.mocked(listMaintenanceReminders).mockResolvedValue([]); jest.mocked(listServiceWarranties).mockResolvedValue([]); jest.mocked(listWorkshopEmployees).mockResolvedValue([]);
   jest.mocked(getEmployeeProductivity).mockResolvedValue([{ membership_id: 'm1', full_name: 'João Mecânico', orders_delivered: 2, labor_value: 1000, minutes_logged: 245, commission_rate: 8, estimated_commission: 80 }]);
   let screen: ReactTestRenderer.ReactTestRenderer;

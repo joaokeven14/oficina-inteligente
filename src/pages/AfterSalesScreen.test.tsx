@@ -17,6 +17,7 @@ test('shows workshop maintenance reminders and warranty records', async () => {
   jest.mocked(getWorkshopPermissions).mockResolvedValue({
     dashboard: { view: true, create: false, update: false, delete: false }, clients: { view: false, create: false, update: false, delete: false },
     vehicles: { view: false, create: false, update: false, delete: false }, service_orders: { view: true, create: true, update: true, delete: false },
+    after_sales: { view: true, create: true, update: true, delete: false },
     inventory: { view: false, create: false, update: false, delete: false }, finance: { view: false, create: false, update: false, delete: false },
     estimates: { view: false, create: false, update: false, delete: false },
     employees: { view: false, create: false, update: false, delete: false }, reports: { view: false, create: false, update: false, delete: false }, settings: { view: false, create: false, update: false, delete: false },
@@ -36,9 +37,27 @@ test('builds a maintenance history document from the vehicle service orders', as
   jest.mocked(listServiceOrders).mockResolvedValue([order]);
   jest.mocked(listServiceOrderItems).mockResolvedValue([{ id: 'i1', workshop_id: 'w1', service_order_id: 'o1', inventory_product_id: null, item_type: 'labor', description: 'Troca das pastilhas', quantity: 1, unit_price: 180, line_total: 180 }]);
   jest.mocked(getWorkshopSettings).mockResolvedValue({ id: 'w1', name: 'Oficina Sul', logo_path: null, logo_url: null, cnpj: null, phone: null, whatsapp: null, email: null, address: null, city: null, state: null, responsible_name: null, opening_hours: null });
-  jest.mocked(getWorkshopPermissions).mockResolvedValue({ dashboard: { view: true, create: false, update: false, delete: false }, clients: { view: false, create: false, update: false, delete: false }, vehicles: { view: false, create: false, update: false, delete: false }, service_orders: { view: true, create: false, update: false, delete: false }, estimates: { view: false, create: false, update: false, delete: false }, inventory: { view: false, create: false, update: false, delete: false }, finance: { view: false, create: false, update: false, delete: false }, employees: { view: false, create: false, update: false, delete: false }, reports: { view: false, create: false, update: false, delete: false }, settings: { view: false, create: false, update: false, delete: false } });
+  jest.mocked(getWorkshopPermissions).mockResolvedValue({ dashboard: { view: true, create: false, update: false, delete: false }, clients: { view: false, create: false, update: false, delete: false }, vehicles: { view: false, create: false, update: false, delete: false }, service_orders: { view: true, create: false, update: false, delete: false }, after_sales: { view: true, create: true, update: true, delete: false }, estimates: { view: false, create: false, update: false, delete: false }, inventory: { view: false, create: false, update: false, delete: false }, finance: { view: false, create: false, update: false, delete: false }, employees: { view: false, create: false, update: false, delete: false }, reports: { view: false, create: false, update: false, delete: false }, settings: { view: false, create: false, update: false, delete: false } });
   let screen: ReactTestRenderer.ReactTestRenderer;
   await ReactTestRenderer.act(async () => { screen = ReactTestRenderer.create(<AfterSalesScreen workshopId="w1" workshopName="Oficina Sul" />); await new Promise<void>((resolve) => setImmediate(resolve)); });
   await ReactTestRenderer.act(async () => { screen!.root.findByProps({ accessibilityLabel: 'Gerar histórico ABC1D23' }).props.onPress(); await new Promise<void>((resolve) => setImmediate(resolve)); });
   expect(openPrintableDocument).toHaveBeenCalledWith('Histórico de manutenção do veículo', 'Oficina Sul', expect.arrayContaining([expect.objectContaining({ label: 'Diagnóstico da OS #5', value: 'Pastilhas gastas' }), expect.objectContaining({ label: 'Serviço da OS #5: Troca das pastilhas' })]), undefined, null);
+});
+
+test('blocks after-sales data when the owner has not granted access', async () => {
+  jest.mocked(getWorkshopPermissions).mockResolvedValue({
+    dashboard: { view: false, create: false, update: false, delete: false }, clients: { view: false, create: false, update: false, delete: false },
+    vehicles: { view: false, create: false, update: false, delete: false }, service_orders: { view: true, create: false, update: false, delete: false },
+    estimates: { view: false, create: false, update: false, delete: false }, inventory: { view: false, create: false, update: false, delete: false },
+    finance: { view: false, create: false, update: false, delete: false }, employees: { view: false, create: false, update: false, delete: false },
+    reports: { view: false, create: false, update: false, delete: false }, settings: { view: false, create: false, update: false, delete: false },
+  });
+  jest.mocked(listMaintenanceReminders).mockClear(); jest.mocked(listServiceWarranties).mockClear(); jest.mocked(listVehicles).mockClear(); jest.mocked(listServiceOrders).mockClear();
+  let screen: ReactTestRenderer.ReactTestRenderer;
+  await ReactTestRenderer.act(async () => { screen = ReactTestRenderer.create(<AfterSalesScreen workshopId="w1" workshopName="Oficina Sul" />); await new Promise<void>((resolve) => setImmediate(resolve)); });
+  expect(JSON.stringify(screen!.toJSON())).toContain('O proprietário ainda não autorizou seu acesso a esta área.');
+  expect(listMaintenanceReminders).not.toHaveBeenCalled();
+  expect(listServiceWarranties).not.toHaveBeenCalled();
+  expect(listVehicles).not.toHaveBeenCalled();
+  expect(listServiceOrders).not.toHaveBeenCalled();
 });
