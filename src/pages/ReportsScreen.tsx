@@ -92,7 +92,6 @@ export default function ReportsScreen({ workshopId, workshopName, isOwner }: { w
       ...productivity.flatMap((employee) => [
         [`Tempo registrado de ${employee.full_name}`, `${Math.round(Number(employee.minutes_logged))} min`],
         [`Mão de obra concluída de ${employee.full_name}`, money(Number(employee.labor_value))],
-        [`Comissão estimada de ${employee.full_name}`, `${employee.commission_rate}% · ${money(Number(employee.estimated_commission))}`],
       ]) as Array<[string, string]>,
     ];
   }, [data, from, to, productivity, canViewAfterSales]);

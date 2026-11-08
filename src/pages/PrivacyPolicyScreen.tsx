@@ -41,7 +41,7 @@ export default function PrivacyPolicyScreen() {
         <DataItem title="Clientes e fornecedores">nome, CPF ou CNPJ, telefone, WhatsApp, e-mail, endereço, pessoa de contato e observações fornecidas pela oficina.</DataItem>
         <DataItem title="Veículos e ordens de serviço">placa, marca, modelo, ano, cor, quilometragem, combustível, chassi, reclamação, diagnóstico, serviços, peças, inspeções, notas, lembretes, garantias, fotos e anexos.</DataItem>
         <DataItem title="Autorizações">nome de quem assina, declaração exibida, valor relacionado, desenho da assinatura e data do registro.</DataItem>
-        <DataItem title="Rotina da oficina">estoque, compras, pagamentos, contas a pagar e receber, valores, vencimentos, status, forma de pagamento, horas registradas e percentuais de comissão.</DataItem>
+        <DataItem title="Rotina da oficina">estoque, compras, pagamentos, contas a pagar e receber, valores, vencimentos, status, forma de pagamento e horas registradas.</DataItem>
         <DataItem title="Sessão no navegador">na versão web, o armazenamento local do navegador mantém a sessão de autenticação para que o usuário continue conectado.</DataItem>
         <Paragraph>Os campos de observação e os anexos podem conter informações adicionais inseridas pelos usuários. A oficina deve registrar somente o que for necessário para a prestação do serviço e evitar senhas, dados de cartão, dados bancários de acesso ou informações pessoais sem relação com a oficina.</Paragraph>
       </Section>

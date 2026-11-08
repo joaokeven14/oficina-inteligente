@@ -832,22 +832,13 @@ export async function listWorkshopEmployees(workshopId: string, client?: Supabas
   ]);
   if (profiles.error) throwFriendly(profiles.error);
   if (permissions.error) throwFriendly(permissions.error);
-  const commissions = await supabase.from('workshop_employee_commissions').select('membership_id,labor_commission_rate').eq('workshop_id', workshopId).in('membership_id', memberIds);
-  if (commissions.error) throwFriendly(commissions.error);
   return rows.map((row) => ({
     ...row,
     profiles: { full_name: profiles.data?.find((profile) => profile.user_id === row.user_id)?.full_name ?? 'Funcionário' },
-    labor_commission_rate: commissions.data?.find((commission) => commission.membership_id === row.id)?.labor_commission_rate ?? 0,
     workshop_member_permissions: (permissions.data ?? []).filter((permission) => permission.membership_id === row.id).map((permission) => ({
       module: permission.module, can_view: permission.can_view, can_create: permission.can_create, can_update: permission.can_update, can_delete: permission.can_delete,
     })),
   })) as WorkshopEmployee[];
-}
-
-export async function setEmployeeLaborCommission(workshopId: string, membershipId: string, rate: number, client?: SupabaseClient): Promise<void> {
-  if (!Number.isFinite(rate) || rate < 0 || rate > 100) throw new Error('Informe uma comissão entre 0% e 100%.');
-  const { error } = await clientOrDefault(client).rpc('set_employee_labor_commission', { target_workshop: workshopId, target_membership: membershipId, target_rate: rate });
-  if (error) throwFriendly(error);
 }
 
 export async function getEmployeeProductivity(workshopId: string, from: string, to: string, client?: SupabaseClient): Promise<EmployeeProductivity[]> {

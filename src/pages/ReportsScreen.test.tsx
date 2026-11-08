@@ -37,11 +37,11 @@ test('builds reports from current persisted workshop data', async () => {
   expect(openPrintableDocument).toHaveBeenCalledWith('Relatório operacional', 'Oficina Sul', expect.arrayContaining([expect.objectContaining({ label: 'Clientes ativos', value: '1' })]), expect.stringContaining('Período:'), null);
 });
 
-test('loads time tracking and estimated commissions only on the owner request', async () => {
+test('loads time tracking and labor value only on the owner request', async () => {
   const allow = { view: true, create: true, update: true, delete: true };
   jest.mocked(getWorkshopPermissions).mockResolvedValue({ dashboard: allow, clients: allow, vehicles: allow, service_orders: allow, after_sales: allow, estimates: allow, inventory: allow, finance: allow, employees: allow, reports: allow, settings: allow });
   jest.mocked(listCustomers).mockResolvedValue([]); jest.mocked(listVehicles).mockResolvedValue([]); jest.mocked(listServiceOrders).mockResolvedValue([]); jest.mocked(listEstimates).mockResolvedValue([]); jest.mocked(listInventoryProducts).mockResolvedValue([]); jest.mocked(listPurchases).mockResolvedValue([]); jest.mocked(listFinancialEntries).mockResolvedValue([]); jest.mocked(listPayables).mockResolvedValue([]); jest.mocked(listMaintenanceReminders).mockResolvedValue([]); jest.mocked(listServiceWarranties).mockResolvedValue([]); jest.mocked(listWorkshopEmployees).mockResolvedValue([]);
-  jest.mocked(getEmployeeProductivity).mockResolvedValue([{ membership_id: 'm1', full_name: 'João Mecânico', orders_delivered: 2, labor_value: 1000, minutes_logged: 245, commission_rate: 8, estimated_commission: 80 }]);
+  jest.mocked(getEmployeeProductivity).mockResolvedValue([{ membership_id: 'm1', full_name: 'João Mecânico', orders_delivered: 2, labor_value: 1000, minutes_logged: 245 }]);
   let screen: ReactTestRenderer.ReactTestRenderer;
   await ReactTestRenderer.act(async () => { screen = ReactTestRenderer.create(<ReportsScreen workshopId="w1" workshopName="Oficina Sul" isOwner />); await new Promise<void>((resolve) => setImmediate(resolve)); });
   expect(getEmployeeProductivity).not.toHaveBeenCalled();
@@ -50,5 +50,6 @@ test('loads time tracking and estimated commissions only on the owner request', 
   expect(getEmployeeProductivity).toHaveBeenCalledTimes(1);
   expect(output).toContain('Tempo registrado de João Mecânico');
   expect(output).toContain('245 min');
-  expect(output).toContain('R$ 80,00');
+  expect(output).toContain('R$ 1.000,00');
+  expect(output).not.toContain('Comissão');
 });
