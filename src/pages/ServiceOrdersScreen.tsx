@@ -40,6 +40,7 @@ export default function ServiceOrdersScreen({ workshopId }: { workshopId: string
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [inventoryProducts, setInventoryProducts] = useState<InventoryProduct[]>([]);
   const [employees, setEmployees] = useState<WorkshopEmployee[]>([]);
+  const [canViewInventory, setCanViewInventory] = useState(false);
   const [canUseInventory, setCanUseInventory] = useState(false);
   const [canCreate, setCanCreate] = useState(false);
   const [canUpdate, setCanUpdate] = useState(false);
@@ -63,6 +64,7 @@ export default function ServiceOrdersScreen({ workshopId }: { workshopId: string
   const [discountValue, setDiscountValue] = useState('0');
   const [itemType, setItemType] = useState<'part' | 'labor'>('labor');
   const [itemDescription, setItemDescription] = useState('');
+  const [inventorySearch, setInventorySearch] = useState('');
   const [itemQuantity, setItemQuantity] = useState('1');
   const [itemPrice, setItemPrice] = useState('');
   const [selectedProductId, setSelectedProductId] = useState('');
@@ -80,6 +82,7 @@ export default function ServiceOrdersScreen({ workshopId }: { workshopId: string
       setVehicles(vehicleRows);
       setInventoryProducts(stockRows);
       setEmployees(employeeRows.filter((employee) => employee.status === 'active'));
+      setCanViewInventory(access.inventory.view);
       setCanUseInventory(access.inventory.create);
       setCanCreate(access.service_orders.create);
       setCanUpdate(access.service_orders.update);
@@ -150,6 +153,15 @@ export default function ServiceOrdersScreen({ workshopId }: { workshopId: string
     });
   }, [customers, vehicleCustomerSearch, vehicles]);
   const displayedOrderVehicles = matchingOrderVehicles.slice(0, 40);
+  const availableInventoryProducts = useMemo(() => inventoryProducts.filter((product) => Number(product.quantity) > 0), [inventoryProducts]);
+  const matchingInventoryProducts = useMemo(() => {
+    const query = searchKey(inventorySearch);
+    const compactQuery = compactSearchKey(inventorySearch);
+    if (!query) return availableInventoryProducts;
+    return availableInventoryProducts.filter((product) => [product.name, product.code ?? '', product.brand ?? '', product.category ?? '', product.location ?? '']
+      .some((value) => searchKey(value).includes(query) || (compactQuery && compactSearchKey(value).includes(compactQuery))));
+  }, [availableInventoryProducts, inventorySearch]);
+  const displayedInventoryProducts = matchingInventoryProducts.slice(0, 40);
 
   const beginCreate = () => {
     setSelectedCustomerId(''); setSelectedVehicleId(''); setVehicleCustomerSearch(''); setVehicleCustomerPickerOpen(false); setSelectedMembershipId(employees[0]?.id ?? ''); setComplaint(''); setOdometer(''); setError(''); setCreating(true);
@@ -278,7 +290,7 @@ export default function ServiceOrdersScreen({ workshopId }: { workshopId: string
         item_type: itemType, description: itemDescription, quantity: Number(itemQuantity.replace(',', '.')), unit_price: Number(itemPrice.replace(',', '.')),
         inventory_product_id: itemType === 'part' ? selectedProductId || null : null,
       });
-      setItemDescription(''); setItemQuantity('1'); setItemPrice(''); setSelectedProductId('');
+      setItemDescription(''); setInventorySearch(''); setItemQuantity('1'); setItemPrice(''); setSelectedProductId('');
       setItems(await listServiceOrderItems(workshopId, selectedOrder.id));
       await refresh();
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Não foi possível adicionar o item.'); }
@@ -401,14 +413,24 @@ export default function ServiceOrdersScreen({ workshopId }: { workshopId: string
             {canCreate ? (
               <View style={styles.addItemCard}>
                 <Text style={styles.label}>Adicionar item</Text>
-                <View style={styles.typeChoices}>{(['labor', 'part'] as const).map((type) => { const active = itemType === type; return <Pressable key={type} style={[styles.typeChoice, active && styles.typeChoiceActive]} onPress={() => { setItemType(type); setSelectedProductId(''); }}><Text style={[styles.typeChoiceText, active && styles.typeChoiceTextActive]}>{type === 'labor' ? 'Mão de obra' : 'Peça'}</Text></Pressable>; })}</View>
-                {itemType === 'part' && canUseInventory && inventoryProducts.length ? <>
-                  <Text style={styles.meta}>Selecione um produto para baixar o estoque automaticamente ao lançar a peça.</Text>
-                  <ScrollView horizontal contentContainerStyle={styles.statusOptions} showsHorizontalScrollIndicator={false}>
-                    {inventoryProducts.map((product) => <Pressable key={product.id} style={[styles.statusOption, selectedProductId === product.id && styles.statusOptionActive]} onPress={() => { setSelectedProductId(product.id); setItemDescription(product.name); setItemPrice(String(product.sale_price)); }}><Text style={[styles.statusOptionText, selectedProductId === product.id && styles.statusOptionTextActive]}>{product.name} · saldo {product.quantity}</Text></Pressable>)}
-                  </ScrollView>
-                </> : null}
-                <FormField label="Descrição" value={itemDescription} onChangeText={setItemDescription} placeholder={itemType === 'labor' ? 'Ex.: Troca de pastilhas' : 'Ex.: Jogo de pastilhas'} />
+                <View style={styles.typeChoices}>{(['labor', 'part'] as const).map((type) => { const active = itemType === type; return <Pressable key={type} style={[styles.typeChoice, active && styles.typeChoiceActive]} onPress={() => { setItemType(type); setSelectedProductId(''); setInventorySearch(''); setItemDescription(''); setItemPrice(''); }}><Text style={[styles.typeChoiceText, active && styles.typeChoiceTextActive]}>{type === 'labor' ? 'Mão de obra' : 'Peça'}</Text></Pressable>; })}</View>
+                {itemType === 'part' && canViewInventory ? <>
+                  <Text style={styles.meta}>{canUseInventory ? 'Pesquise uma peça com saldo. Ao adicioná-la à OS, o estoque será baixado automaticamente.' : 'Pesquise peças disponíveis. Sua conta pode consultar o estoque, mas não pode fazer a baixa automática.'}</Text>
+                  <FormField label="Pesquisar peça em estoque" value={inventorySearch} onChangeText={setInventorySearch} placeholder="Nome, código, marca ou categoria" />
+                  {displayedInventoryProducts.length ? <View style={styles.inventorySearchResults}>
+                    {displayedInventoryProducts.map((product) => <Pressable key={product.id} accessibilityRole="button" style={[styles.inventoryProductChoice, selectedProductId === product.id && styles.inventoryProductChoiceActive]} onPress={() => {
+                      setSelectedProductId(canUseInventory ? product.id : '');
+                      setItemDescription(product.name);
+                      setItemPrice(String(product.sale_price));
+                      setInventorySearch('');
+                    }}>
+                      <Text style={styles.inventoryProductName}>{product.name}{product.code ? ` · ${product.code}` : ''}</Text>
+                      <Text style={styles.inventoryProductMeta}>{product.brand ? `${product.brand} · ` : ''}{product.category ? `${product.category} · ` : ''}{Number(product.quantity).toLocaleString('pt-BR')} disponível(is) · {money(product.sale_price)}</Text>
+                    </Pressable>)}
+                    {matchingInventoryProducts.length > displayedInventoryProducts.length ? <Text style={styles.noData}>Mostrando 40 peças. Digite mais dados para refinar a busca.</Text> : null}
+                  </View> : <Text style={styles.noData}>{availableInventoryProducts.length ? 'Nenhuma peça em estoque encontrada.' : 'Não há peças com saldo disponível no estoque.'}</Text>}
+                </> : itemType === 'part' ? <Text style={styles.noData}>A consulta ao estoque não está liberada para sua conta. Peça ao proprietário para liberar o acesso.</Text> : null}
+                <FormField label={itemType === 'labor' ? 'Descrição da mão de obra' : 'Descrição da peça'} value={itemDescription} onChangeText={(value) => { setItemDescription(value); if (selectedProductId) setSelectedProductId(''); }} placeholder={itemType === 'labor' ? 'Descreva o serviço realizado' : 'Descreva a peça utilizada'} />
                 <View style={styles.twoColumns}><View style={styles.column}><FormField label="Quantidade" value={itemQuantity} onChangeText={setItemQuantity} keyboardType="decimal-pad" /></View><View style={styles.column}><FormField label="Valor unitário (R$)" value={itemPrice} onChangeText={setItemPrice} keyboardType="decimal-pad" placeholder="0,00" /></View></View>
                 <Pressable accessibilityRole="button" disabled={busy} style={[styles.secondaryButton, busy && styles.disabled]} onPress={() => { addItem(); }}><Text style={styles.secondaryButtonText}>{busy ? 'Salvando…' : 'Adicionar à ordem'}</Text></Pressable>
               </View>
@@ -490,6 +512,11 @@ const styles = StyleSheet.create({
   itemRow: { minHeight: 62, paddingVertical: 10, flexDirection: 'row', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: '#e4eaf0' },
   itemMain: { flex: 1, paddingRight: 8 },
   itemName: { color: '#26394e', fontSize: 12, fontWeight: '700' },
+  inventorySearchResults: { marginTop: 7, gap: 6 },
+  inventoryProductChoice: { padding: 11, borderWidth: 1, borderColor: '#dce3eb', borderRadius: 8, backgroundColor: '#fff' },
+  inventoryProductChoiceActive: { borderColor: '#e97824', backgroundColor: '#fff5ed' },
+  inventoryProductName: { color: '#33465b', fontSize: 12, fontWeight: '700' },
+  inventoryProductMeta: { marginTop: 4, color: '#718197', fontSize: 11 },
   removeButton: { marginLeft: 8, width: 29, height: 29, alignItems: 'center', justifyContent: 'center', borderRadius: 8, backgroundColor: '#fbeceb' },
   removeText: { color: '#9d4b3c', fontSize: 20, lineHeight: 23 },
   addItemCard: { marginTop: 17, padding: 14, borderWidth: 1, borderColor: '#e1e8ef', borderRadius: 12, backgroundColor: '#fff' },
