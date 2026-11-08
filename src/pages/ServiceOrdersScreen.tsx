@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import FormField from '../components/FormField';
 import ServiceOrderInspectionPanel from './ServiceOrderInspectionPanel';
 import ServiceOrderAuthorizationPanel from './ServiceOrderAuthorizationPanel';
@@ -33,6 +33,7 @@ const openedDate = (value: string) => new Date(value).toLocaleDateString('pt-BR'
 const statusLabel = (value: ServiceOrderStatus) => serviceOrderStatuses.find((status) => status.value === value)?.label ?? value;
 const searchKey = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLocaleLowerCase('pt-BR');
 const compactSearchKey = (value: string) => searchKey(value).replace(/[^a-z0-9]/g, '');
+type PendingOrderAction = { type: 'finalize' } | { type: 'delete_item'; item: ServiceOrderItem };
 
 export default function ServiceOrdersScreen({ workshopId }: { workshopId: string }) {
   const [orders, setOrders] = useState<ServiceOrder[]>([]);
@@ -51,6 +52,7 @@ export default function ServiceOrdersScreen({ workshopId }: { workshopId: string
   const [query, setQuery] = useState('');
   const [creating, setCreating] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<ServiceOrder | null>(null);
+  const [pendingOrderAction, setPendingOrderAction] = useState<PendingOrderAction | null>(null);
   const [items, setItems] = useState<ServiceOrderItem[]>([]);
   const [activeTimer, setActiveTimer] = useState<ServiceOrderTimeEntry | null>(null);
   const [selectedCustomerId, setSelectedCustomerId] = useState('');
@@ -127,6 +129,7 @@ export default function ServiceOrdersScreen({ workshopId }: { workshopId: string
   const customersById = useMemo(() => new Map(customers.map((customer) => [customer.id, customer])), [customers]);
   const selectedOrderVehicle = vehicles.find((vehicle) => vehicle.id === selectedVehicleId) ?? null;
   const selectedCustomer = customersById.get(selectedCustomerId) ?? null;
+  const selectedOrderIsEditable = !!selectedOrder && !['completed', 'delivered', 'canceled'].includes(selectedOrder.status);
   const matchingOrderVehicles = useMemo(() => {
     const query = searchKey(vehicleCustomerSearch);
     const compactQuery = compactSearchKey(vehicleCustomerSearch);
@@ -190,9 +193,17 @@ export default function ServiceOrdersScreen({ workshopId }: { workshopId: string
   const changeStatus = async (status: ServiceOrderStatus) => {
     if (!selectedOrder || !canUpdate) return;
     setBusy(true); setError('');
-    try { await updateServiceOrder(workshopId, selectedOrder.id, { status }); await refresh(); }
+    try {
+      if (status === 'completed' && activeTimer) { await stopServiceOrderTimer(workshopId, selectedOrder.id); setActiveTimer(null); }
+      await updateServiceOrder(workshopId, selectedOrder.id, { status }); await refresh();
+    }
     catch (reason) { setError(reason instanceof Error ? reason.message : 'Não foi possível atualizar o status.'); }
     finally { setBusy(false); }
+  };
+
+  const confirmFinalizeOrder = () => {
+    if (!selectedOrder || !canUpdate || !selectedOrderIsEditable) return;
+    setPendingOrderAction({ type: 'finalize' });
   };
 
   const saveDiagnosis = async () => {
@@ -297,17 +308,25 @@ export default function ServiceOrdersScreen({ workshopId }: { workshopId: string
     finally { setBusy(false); }
   };
 
-  const removeItem = (item: ServiceOrderItem) => Alert.alert(
-    'Remover item da ordem',
-    `Remover “${item.description}” da ordem? O total será recalculado pelo banco.`,
-    [{ text: 'Cancelar', style: 'cancel' }, { text: 'Remover', style: 'destructive', onPress: () => { (async () => {
-      try {
-        await archiveServiceOrderItem(workshopId, item.id);
-        if (selectedOrder) setItems(await listServiceOrderItems(workshopId, selectedOrder.id));
-        await refresh();
-      } catch (reason) { setError(reason instanceof Error ? reason.message : 'Não foi possível remover o item.'); }
-    })().catch(() => setError('Não foi possível remover o item.')); } }],
-  );
+  const removeItem = (item: ServiceOrderItem) => setPendingOrderAction({ type: 'delete_item', item });
+  const executePendingOrderAction = async () => {
+    const action = pendingOrderAction;
+    if (!action || !selectedOrder) return;
+    setPendingOrderAction(null);
+    if (action.type === 'finalize') {
+      if (!canUpdate || !selectedOrderIsEditable) return;
+      await changeStatus('completed');
+      return;
+    }
+    if (!canDelete || !selectedOrderIsEditable) return;
+    setBusy(true); setError('');
+    try {
+      await archiveServiceOrderItem(workshopId, action.item.id);
+      setItems(await listServiceOrderItems(workshopId, selectedOrder.id));
+      await refresh();
+    } catch (reason) { setError(reason instanceof Error ? reason.message : 'Não foi possível excluir o item.'); }
+    finally { setBusy(false); }
+  };
 
   const closeCreate = () => { if (!busy) setCreating(false); };
   const closeOrder = () => { if (!busy) setSelectedOrder(null); };
@@ -405,12 +424,12 @@ export default function ServiceOrdersScreen({ workshopId }: { workshopId: string
               <View key={item.id} style={styles.itemRow}>
                 <View style={styles.itemMain}><Text style={styles.itemName}>{item.description}</Text><Text style={styles.meta}>{item.item_type === 'labor' ? 'Mão de obra' : 'Peça'} · {item.quantity} × {money(item.unit_price)}</Text></View>
                 <Text style={styles.amount}>{money(item.line_total)}</Text>
-                {canDelete ? <Pressable accessibilityRole="button" accessibilityLabel={`Remover ${item.description}`} style={styles.removeButton} onPress={() => removeItem(item)}><Text style={styles.removeText}>×</Text></Pressable> : null}
+                {canDelete && selectedOrderIsEditable ? <Pressable accessibilityRole="button" accessibilityLabel={`Excluir ${item.description} da OS`} disabled={busy} style={[styles.removeButton, busy && styles.disabled]} onPress={() => removeItem(item)}><Text style={styles.removeText}>Excluir</Text></Pressable> : null}
               </View>
             ))}
             {!items.length ? <Text style={styles.noData}>Nenhum serviço ou peça foi lançado nesta ordem.</Text> : null}
 
-            {canCreate ? (
+            {canCreate && selectedOrderIsEditable ? (
               <View style={styles.addItemCard}>
                 <Text style={styles.label}>Adicionar item</Text>
                 <View style={styles.typeChoices}>{(['labor', 'part'] as const).map((type) => { const active = itemType === type; return <Pressable key={type} style={[styles.typeChoice, active && styles.typeChoiceActive]} onPress={() => { setItemType(type); setSelectedProductId(''); setInventorySearch(''); setItemDescription(''); setItemPrice(''); }}><Text style={[styles.typeChoiceText, active && styles.typeChoiceTextActive]}>{type === 'labor' ? 'Mão de obra' : 'Peça'}</Text></Pressable>; })}</View>
@@ -443,7 +462,22 @@ export default function ServiceOrdersScreen({ workshopId }: { workshopId: string
               <View style={styles.totalLine}><Text style={styles.totalLabel}>Total da OS</Text><Text style={styles.totalValue}>{money(selectedOrder?.total_amount ?? 0)}</Text></View>
               <Text style={styles.totalNote}>Totais são calculados pelo banco. Peças vinculadas a produto têm baixa automática e estorno ao remover ou cancelar a OS.</Text>
             </View>
+            {canUpdate && selectedOrderIsEditable ? <Pressable accessibilityRole="button" disabled={busy} style={[styles.finishButton, busy && styles.disabled]} onPress={confirmFinalizeOrder}><Text style={styles.finishButtonText}>{busy ? 'Aguarde…' : 'Finalizar OS'}</Text></Pressable> : null}
           </ScrollView>
+        </View>
+      </Modal>
+      <Modal transparent visible={!!pendingOrderAction} animationType="fade" onRequestClose={() => { if (!busy) setPendingOrderAction(null); }}>
+        <View style={styles.confirmBackdrop}>
+          <View style={styles.confirmCard}>
+            <Text style={styles.confirmTitle}>{pendingOrderAction?.type === 'finalize' ? 'Finalizar ordem de serviço' : 'Excluir item da ordem'}</Text>
+            <Text style={styles.confirmBody}>{pendingOrderAction?.type === 'finalize'
+              ? `Marcar a OS #${selectedOrder?.order_number} como concluída?`
+              : `Excluir “${pendingOrderAction?.item.description ?? ''}”? O total será recalculado e, se for uma peça vinculada ao estoque, a quantidade será devolvida.`}</Text>
+            <View style={styles.confirmActions}>
+              <Pressable accessibilityRole="button" disabled={busy} style={styles.confirmCancelButton} onPress={() => setPendingOrderAction(null)}><Text style={styles.confirmCancelText}>Cancelar</Text></Pressable>
+              <Pressable accessibilityRole="button" disabled={busy} style={[styles.confirmActionButton, pendingOrderAction?.type === 'finalize' ? styles.confirmFinalizeButton : styles.confirmDeleteButton, busy && styles.disabled]} onPress={() => { executePendingOrderAction().catch(() => undefined); }}><Text style={styles.confirmActionText}>{busy ? 'Aguarde…' : pendingOrderAction?.type === 'finalize' ? 'Finalizar OS' : 'Excluir item'}</Text></Pressable>
+            </View>
+          </View>
         </View>
       </Modal>
     </View>
@@ -458,6 +492,19 @@ const styles = StyleSheet.create({
   subtitle: { marginTop: 4, color: '#718197', fontSize: 12 },
   primaryButton: { minHeight: 40, paddingHorizontal: 15, alignItems: 'center', justifyContent: 'center', borderRadius: 9, backgroundColor: '#10243a' },
   primaryButtonText: { color: '#fff', fontSize: 12, fontWeight: '700' },
+  finishButton: { minHeight: 44, marginTop: 8, alignItems: 'center', justifyContent: 'center', borderRadius: 9, backgroundColor: '#36764c' },
+  finishButtonText: { color: '#fff', fontSize: 13, fontWeight: '800' },
+  confirmBackdrop: { flex: 1, padding: 20, justifyContent: 'center', backgroundColor: '#0008' },
+  confirmCard: { padding: 18, gap: 11, borderRadius: 13, backgroundColor: '#fff' },
+  confirmTitle: { color: '#10243a', fontSize: 16, fontWeight: '800' },
+  confirmBody: { color: '#52657a', fontSize: 12, lineHeight: 18 },
+  confirmActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 8, marginTop: 5 },
+  confirmCancelButton: { minHeight: 38, paddingHorizontal: 12, justifyContent: 'center' },
+  confirmCancelText: { color: '#52657a', fontSize: 11, fontWeight: '700' },
+  confirmActionButton: { minHeight: 38, paddingHorizontal: 14, alignItems: 'center', justifyContent: 'center', borderRadius: 8 },
+  confirmFinalizeButton: { backgroundColor: '#36764c' },
+  confirmDeleteButton: { backgroundColor: '#a23d33' },
+  confirmActionText: { color: '#fff', fontSize: 11, fontWeight: '800' },
   secondaryButton: { minHeight: 42, marginTop: 11, paddingHorizontal: 14, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#cad6e2', borderRadius: 9, backgroundColor: '#fff' },
   secondaryButtonText: { color: '#26425f', fontSize: 12, fontWeight: '700' },
   disabled: { opacity: 0.6 },
@@ -517,8 +564,8 @@ const styles = StyleSheet.create({
   inventoryProductChoiceActive: { borderColor: '#e97824', backgroundColor: '#fff5ed' },
   inventoryProductName: { color: '#33465b', fontSize: 12, fontWeight: '700' },
   inventoryProductMeta: { marginTop: 4, color: '#718197', fontSize: 11 },
-  removeButton: { marginLeft: 8, width: 29, height: 29, alignItems: 'center', justifyContent: 'center', borderRadius: 8, backgroundColor: '#fbeceb' },
-  removeText: { color: '#9d4b3c', fontSize: 20, lineHeight: 23 },
+  removeButton: { marginLeft: 8, minHeight: 30, paddingHorizontal: 9, alignItems: 'center', justifyContent: 'center', borderRadius: 8, backgroundColor: '#fbeceb' },
+  removeText: { color: '#9d4b3c', fontSize: 10, fontWeight: '800' },
   addItemCard: { marginTop: 17, padding: 14, borderWidth: 1, borderColor: '#e1e8ef', borderRadius: 12, backgroundColor: '#fff' },
   typeChoices: { flexDirection: 'row', gap: 8 },
   typeChoice: { paddingVertical: 7, paddingHorizontal: 10, borderWidth: 1, borderColor: '#dce3eb', borderRadius: 8 },
