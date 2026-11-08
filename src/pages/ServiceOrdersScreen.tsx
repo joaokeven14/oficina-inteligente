@@ -31,6 +31,8 @@ import type { Customer, InventoryProduct, ServiceOrder, ServiceOrderItem, Servic
 const money = (value: number | string) => `R$ ${Number(value).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const openedDate = (value: string) => new Date(value).toLocaleDateString('pt-BR');
 const statusLabel = (value: ServiceOrderStatus) => serviceOrderStatuses.find((status) => status.value === value)?.label ?? value;
+const searchKey = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLocaleLowerCase('pt-BR');
+const compactSearchKey = (value: string) => searchKey(value).replace(/[^a-z0-9]/g, '');
 
 export default function ServiceOrdersScreen({ workshopId }: { workshopId: string }) {
   const [orders, setOrders] = useState<ServiceOrder[]>([]);
@@ -52,6 +54,8 @@ export default function ServiceOrdersScreen({ workshopId }: { workshopId: string
   const [activeTimer, setActiveTimer] = useState<ServiceOrderTimeEntry | null>(null);
   const [selectedCustomerId, setSelectedCustomerId] = useState('');
   const [selectedVehicleId, setSelectedVehicleId] = useState('');
+  const [vehicleCustomerSearch, setVehicleCustomerSearch] = useState('');
+  const [vehicleCustomerPickerOpen, setVehicleCustomerPickerOpen] = useState(false);
   const [selectedMembershipId, setSelectedMembershipId] = useState('');
   const [complaint, setComplaint] = useState('');
   const [odometer, setOdometer] = useState('');
@@ -117,11 +121,38 @@ export default function ServiceOrdersScreen({ workshopId }: { workshopId: string
       .some((value) => value?.toLocaleLowerCase('pt-BR').includes(normalized)));
   }, [orders, query]);
 
-  const selectedCustomer = customers.find((customer) => customer.id === selectedCustomerId) ?? null;
-  const availableVehicles = selectedCustomer ? vehicles.filter((vehicle) => vehicle.customer_id === selectedCustomer.id) : [];
+  const customersById = useMemo(() => new Map(customers.map((customer) => [customer.id, customer])), [customers]);
+  const selectedOrderVehicle = vehicles.find((vehicle) => vehicle.id === selectedVehicleId) ?? null;
+  const selectedCustomer = customersById.get(selectedCustomerId) ?? null;
+  const matchingOrderVehicles = useMemo(() => {
+    const query = searchKey(vehicleCustomerSearch);
+    const compactQuery = compactSearchKey(vehicleCustomerSearch);
+    const documentDigits = vehicleCustomerSearch.replace(/\D/g, '');
+    if (!query) return vehicles;
+    return vehicles.filter((vehicle) => {
+      const customer = customersById.get(vehicle.customer_id);
+      const fields = [vehicle.plate, vehicle.make, vehicle.model, customer?.full_name ?? ''];
+      const textMatch = fields.some((value) => searchKey(value).includes(query) || (compactQuery && compactSearchKey(value).includes(compactQuery)));
+      const document = customer?.document?.replace(/\D/g, '') ?? '';
+      return textMatch || (documentDigits.length > 0 && document.includes(documentDigits));
+    });
+  }, [customersById, vehicleCustomerSearch, vehicles]);
+  const customersWithoutVehicles = useMemo(() => {
+    const query = searchKey(vehicleCustomerSearch);
+    const documentDigits = vehicleCustomerSearch.replace(/\D/g, '');
+    if (!query) return [];
+    const customersWithVehicle = new Set(vehicles.map((vehicle) => vehicle.customer_id));
+    return customers.filter((customer) => {
+      if (customersWithVehicle.has(customer.id)) return false;
+      const nameMatch = searchKey(customer.full_name).includes(query);
+      const document = customer.document?.replace(/\D/g, '') ?? '';
+      return nameMatch || (documentDigits.length > 0 && document.includes(documentDigits));
+    });
+  }, [customers, vehicleCustomerSearch, vehicles]);
+  const displayedOrderVehicles = matchingOrderVehicles.slice(0, 40);
 
   const beginCreate = () => {
-    setSelectedCustomerId(''); setSelectedVehicleId(''); setSelectedMembershipId(employees[0]?.id ?? ''); setComplaint(''); setOdometer(''); setError(''); setCreating(true);
+    setSelectedCustomerId(''); setSelectedVehicleId(''); setVehicleCustomerSearch(''); setVehicleCustomerPickerOpen(false); setSelectedMembershipId(employees[0]?.id ?? ''); setComplaint(''); setOdometer(''); setError(''); setCreating(true);
   };
 
   const saveOrder = async () => {
@@ -295,16 +326,39 @@ export default function ServiceOrdersScreen({ workshopId }: { workshopId: string
           <View style={styles.modalHeader}><View><Text style={styles.title}>Nova ordem de serviço</Text><Text style={styles.subtitle}>Escolha um cliente e um veículo cadastrado.</Text></View><Pressable onPress={closeCreate}><Text style={styles.cancelText}>Fechar</Text></Pressable></View>
           {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
           <ScrollView contentContainerStyle={styles.formContent} keyboardShouldPersistTaps="handled">
-            <Text style={styles.label}>Cliente *</Text>
-            {customers.length ? customers.map((customer) => {
-              const active = selectedCustomerId === customer.id;
-              return <Pressable key={customer.id} accessibilityRole="radio" accessibilityState={{ selected: active }} style={[styles.choice, active && styles.choiceActive]} onPress={() => { setSelectedCustomerId(customer.id); setSelectedVehicleId(''); }}><Text style={[styles.choiceText, active && styles.choiceTextActive]}>{customer.full_name}</Text></Pressable>;
-            }) : <Text style={styles.noData}>Cadastre um cliente antes de abrir a OS.</Text>}
-            <Text style={styles.label}>Veículo *</Text>
-            {availableVehicles.length ? availableVehicles.map((vehicle) => {
-              const active = selectedVehicleId === vehicle.id;
-              return <Pressable key={vehicle.id} accessibilityRole="radio" accessibilityState={{ selected: active }} style={[styles.choice, active && styles.choiceActive]} onPress={() => setSelectedVehicleId(vehicle.id)}><Text style={[styles.choiceText, active && styles.choiceTextActive]}>{vehicle.plate} · {vehicle.make} {vehicle.model}</Text></Pressable>;
-            }) : <Text style={styles.noData}>{selectedCustomer ? 'Este cliente ainda não tem veículo ativo.' : 'Selecione o cliente para listar os veículos.'}</Text>}
+            <Text style={styles.label}>Cliente e veículo *</Text>
+            {selectedOrderVehicle && selectedCustomer ? <View style={styles.selectedVehicleCard}>
+              <View style={styles.selectedVehicleInfo}>
+                <Text style={styles.selectedVehiclePlate}>{selectedOrderVehicle.plate} · {selectedOrderVehicle.make} {selectedOrderVehicle.model}</Text>
+                <Text style={styles.selectedVehicleCustomer}>{selectedCustomer.full_name}{selectedCustomer.document ? ` · ${selectedCustomer.document}` : ''}</Text>
+              </View>
+              <Pressable accessibilityRole="button" style={styles.changeVehicleButton} onPress={() => { setVehicleCustomerPickerOpen(true); setVehicleCustomerSearch(''); }}><Text style={styles.changeVehicleText}>Trocar</Text></Pressable>
+            </View> : <Pressable accessibilityRole="button" style={styles.selectVehicleButton} onPress={() => { setVehicleCustomerPickerOpen(true); setVehicleCustomerSearch(''); }}>
+              <Text style={styles.selectVehicleText}>Pesquisar cliente ou veículo</Text>
+            </Pressable>}
+            {vehicleCustomerPickerOpen ? <View style={styles.vehicleCustomerPicker}>
+              <View style={styles.vehicleCustomerPickerHeader}>
+                <Text style={styles.vehicleCustomerPickerTitle}>Buscar por cliente ou veículo</Text>
+                <Pressable accessibilityRole="button" onPress={() => { setVehicleCustomerPickerOpen(false); setVehicleCustomerSearch(''); }}><Text style={styles.changeVehicleText}>Fechar busca</Text></Pressable>
+              </View>
+              <FormField label="Nome, CPF, placa, marca ou modelo" value={vehicleCustomerSearch} onChangeText={setVehicleCustomerSearch} placeholder="Digite um nome, CPF ou dado do veículo" />
+              {displayedOrderVehicles.map((vehicle) => {
+                const customer = customersById.get(vehicle.customer_id);
+                return <Pressable key={vehicle.id} accessibilityRole="button" style={styles.vehicleSearchChoice} onPress={() => {
+                  setSelectedVehicleId(vehicle.id);
+                  setSelectedCustomerId(vehicle.customer_id);
+                  setVehicleCustomerPickerOpen(false);
+                  setVehicleCustomerSearch('');
+                }}>
+                  <Text style={styles.vehicleSearchTitle}>{vehicle.plate} · {vehicle.make} {vehicle.model}</Text>
+                  <Text style={styles.vehicleSearchSubtitle}>{customer?.full_name ?? 'Cliente'}{customer?.document ? ` · ${customer.document}` : ''}</Text>
+                </Pressable>;
+              })}
+              {matchingOrderVehicles.length > displayedOrderVehicles.length ? <Text style={styles.noData}>Mostrando 40 resultados. Digite mais dados para refinar a busca.</Text> : null}
+              {vehicleCustomerSearch.trim() && !matchingOrderVehicles.length && customersWithoutVehicles.length ? customersWithoutVehicles.map((customer) => <Text key={customer.id} style={styles.noData}>{customer.full_name}{customer.document ? ` · ${customer.document}` : ''} — sem veículo cadastrado para abrir a OS.</Text>) : null}
+              {vehicleCustomerSearch.trim() && !matchingOrderVehicles.length && !customersWithoutVehicles.length ? <Text style={styles.noData}>Nenhum cliente ou veículo encontrado. Confira o que digitou ou cadastre primeiro o cliente e o veículo.</Text> : null}
+              {!vehicles.length && !customers.length ? <Text style={styles.noData}>Cadastre um cliente e um veículo antes de abrir a OS.</Text> : null}
+            </View> : null}
             {employees.length ? <><Text style={styles.label}>Responsável pela OS</Text><View style={styles.statusOptions}>{employees.map((employee) => <Pressable key={employee.id} style={[styles.statusOption, selectedMembershipId === employee.id && styles.statusOptionActive]} onPress={() => setSelectedMembershipId(employee.id)}><Text style={[styles.statusOptionText, selectedMembershipId === employee.id && styles.statusOptionTextActive]}>{employee.profiles.full_name}</Text></Pressable>)}</View></> : null}
             <FormField label="Quilometragem de entrada" value={odometer} onChangeText={setOdometer} keyboardType="number-pad" />
             <FormField label="Reclamação do cliente" required value={complaint} onChangeText={setComplaint} multiline placeholder="Descreva o problema relatado pelo cliente" />
@@ -406,6 +460,20 @@ const styles = StyleSheet.create({
   cancelText: { padding: 8, color: '#315a80', fontSize: 12, fontWeight: '700' },
   formContent: { paddingBottom: 34 },
   label: { marginTop: 14, marginBottom: 6, color: '#33465b', fontSize: 12, fontWeight: '700' },
+  selectedVehicleCard: { minHeight: 64, paddingHorizontal: 12, paddingVertical: 10, flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: 1, borderColor: '#d8e5db', borderRadius: 9, backgroundColor: '#f5fbf5' },
+  selectedVehicleInfo: { flex: 1 },
+  selectedVehiclePlate: { color: '#1d3d2a', fontSize: 12, fontWeight: '700' },
+  selectedVehicleCustomer: { marginTop: 4, color: '#5e7967', fontSize: 11 },
+  changeVehicleButton: { paddingVertical: 8, paddingHorizontal: 10, borderRadius: 7, backgroundColor: '#e8f0e9' },
+  changeVehicleText: { color: '#315a80', fontSize: 11, fontWeight: '700' },
+  selectVehicleButton: { minHeight: 42, paddingHorizontal: 12, justifyContent: 'center', borderWidth: 1, borderStyle: 'dashed', borderColor: '#b8c5d3', borderRadius: 9, backgroundColor: '#fff' },
+  selectVehicleText: { color: '#315a80', fontSize: 12, fontWeight: '700' },
+  vehicleCustomerPicker: { marginTop: 8, padding: 10, borderWidth: 1, borderColor: '#dce3eb', borderRadius: 9, backgroundColor: '#fff' },
+  vehicleCustomerPickerHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  vehicleCustomerPickerTitle: { color: '#33465b', fontSize: 12, fontWeight: '700' },
+  vehicleSearchChoice: { padding: 11, borderWidth: 1, borderColor: '#dce3eb', borderRadius: 8, backgroundColor: '#fff', marginTop: 6 },
+  vehicleSearchTitle: { color: '#33465b', fontSize: 12, fontWeight: '700' },
+  vehicleSearchSubtitle: { marginTop: 3, color: '#718197', fontSize: 11 },
   choice: { padding: 11, borderWidth: 1, borderColor: '#dce3eb', borderRadius: 8, backgroundColor: '#fff', marginBottom: 6 },
   choiceActive: { borderColor: '#e97824', backgroundColor: '#fff5ed' },
   choiceText: { color: '#41536a', fontSize: 12 },
