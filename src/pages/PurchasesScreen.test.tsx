@@ -21,6 +21,7 @@ test('loads suppliers, pending purchases and payables for the selected workshop'
     vehicles: { view: false, create: false, update: false, delete: false },
     service_orders: { view: false, create: false, update: false, delete: false },
     inventory: { view: true, create: true, update: true, delete: false },
+    purchases: { view: true, create: true, update: true, delete: false },
     finance: { view: true, create: true, update: true, delete: false },
     estimates: { view: false, create: false, update: false, delete: false },
     dashboard: { view: false, create: false, update: false, delete: false },
@@ -48,6 +49,7 @@ test('offers an audited payment reversal for paid purchase payables', async () =
   permissions.mockResolvedValue({
     clients: { view: false, create: false, update: false, delete: false }, vehicles: { view: false, create: false, update: false, delete: false },
     service_orders: { view: false, create: false, update: false, delete: false }, inventory: { view: true, create: false, update: false, delete: false },
+    purchases: { view: true, create: false, update: false, delete: false },
     finance: { view: true, create: false, update: true, delete: false }, estimates: { view: false, create: false, update: false, delete: false },
     dashboard: { view: false, create: false, update: false, delete: false }, employees: { view: false, create: false, update: false, delete: false }, reports: { view: false, create: false, update: false, delete: false }, settings: { view: false, create: false, update: false, delete: false },
   });

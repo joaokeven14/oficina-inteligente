@@ -13,6 +13,9 @@ export default function PurchasesScreen({ workshopId }: { workshopId: string }) 
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [payables, setPayables] = useState<Payable[]>([]);
   const [payableReversals, setPayableReversals] = useState<PayablePaymentReversal[]>([]);
+  const [hasPurchaseAccess, setHasPurchaseAccess] = useState(false);
+  const [purchaseCreate, setPurchaseCreate] = useState(false);
+  const [inventoryCreate, setInventoryCreate] = useState(false);
   const [financeView, setFinanceView] = useState(false);
   const [financeUpdate, setFinanceUpdate] = useState(false);
   const [payableToReverse, setPayableToReverse] = useState<Payable | null>(null);
@@ -51,12 +54,20 @@ export default function PurchasesScreen({ workshopId }: { workshopId: string }) 
 
   const refresh = useCallback(async () => {
     try {
-      const [vendorRows, productRows, purchaseRows, permissions] = await Promise.all([
-        listSuppliers(workshopId), listInventoryProducts(workshopId), listPurchases(workshopId), getWorkshopPermissions(workshopId),
+      const permissions = await getWorkshopPermissions(workshopId);
+      const purchaseAccess = permissions.purchases ?? { view: false, create: false, update: false, delete: false };
+      setHasPurchaseAccess(purchaseAccess.view); setPurchaseCreate(purchaseAccess.create); setInventoryCreate(permissions.inventory.create);
+      setFinanceView(permissions.finance.view); setFinanceUpdate(permissions.finance.update);
+      setSupplierCreate(purchaseAccess.create); setSupplierUpdate(purchaseAccess.update); setSupplierDelete(purchaseAccess.update);
+      if (!purchaseAccess.view) {
+        setSuppliers([]); setProducts([]); setPurchases([]); setPayables([]); setPayableReversals([]);
+        return;
+      }
+      const [vendorRows, productRows, purchaseRows] = await Promise.all([
+        listSuppliers(workshopId), listInventoryProducts(workshopId), listPurchases(workshopId),
       ]);
       const [payableRows, reversalRows] = permissions.finance.view ? await Promise.all([listPayables(workshopId), listPayablePaymentReversals(workshopId)]) : [[], []];
-      setSuppliers(vendorRows); setProducts(productRows); setPurchases(purchaseRows); setPayables(payableRows); setPayableReversals(reversalRows); setFinanceView(permissions.finance.view); setFinanceUpdate(permissions.finance.update);
-      setSupplierCreate(permissions.inventory.create); setSupplierUpdate(permissions.inventory.update); setSupplierDelete(permissions.inventory.delete);
+      setSuppliers(vendorRows); setProducts(productRows); setPurchases(purchaseRows); setPayables(payableRows); setPayableReversals(reversalRows);
       setSupplierId((current) => current || vendorRows[0]?.id || ''); setProductId((current) => current || productRows[0]?.id || '');
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Não foi possível carregar compras.'); }
     finally { setLoading(false); }
@@ -100,6 +111,7 @@ export default function PurchasesScreen({ workshopId }: { workshopId: string }) 
   };
 
   if (loading) return <ActivityIndicator style={styles.loading} color="#e97824" />;
+  if (!hasPurchaseAccess) return <View style={styles.page}><Text style={styles.title}>Compras</Text><Text style={styles.error}>O proprietário ainda não autorizou seu acesso a esta área.</Text></View>;
   return <ScrollView contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
     <Text style={styles.title}>Fornecedores e compras</Text>
     <Text style={styles.subtitle}>Receber uma compra atualiza o estoque e cria a conta a pagar de forma atômica.</Text>
@@ -119,7 +131,7 @@ export default function PurchasesScreen({ workshopId }: { workshopId: string }) 
       {suppliers.map((supplier) => <View key={supplier.id} style={styles.listRow}><View style={styles.flex}><Text style={styles.itemTitle}>{supplier.name}</Text><Text style={styles.muted}>{[supplier.cnpj, supplier.phone, supplier.email].filter(Boolean).join(' · ') || 'Sem contato informado'}</Text></View>{supplierUpdate ? <Pressable style={styles.smallButton} onPress={() => editSupplier(supplier)}><Text style={styles.smallButtonText}>Editar</Text></Pressable> : null}{supplierDelete ? <Pressable style={styles.removeButton} onPress={() => confirmArchiveSupplier(supplier)}><Text style={styles.removeText}>Arquivar</Text></Pressable> : null}</View>)}
       {!suppliers.length ? <Text style={styles.muted}>Cadastre um fornecedor para registrar compras.</Text> : null}
     </View>
-    <View style={styles.card}>
+    {purchaseCreate ? <View style={styles.card}>
       <Text style={styles.section}>Nova compra</Text>
       <Text style={styles.label}>Fornecedor</Text>
       <View style={styles.chips}>{suppliers.map((supplier) => <Pressable key={supplier.id} style={[styles.chip, supplierId === supplier.id && styles.chipSelected]} onPress={() => setSupplierId(supplier.id)}><Text style={[styles.chipText, supplierId === supplier.id && styles.chipTextSelected]}>{supplier.name}</Text></Pressable>)}</View>
@@ -134,9 +146,10 @@ export default function PurchasesScreen({ workshopId }: { workshopId: string }) 
       {draftItems.length ? <Text style={styles.itemTitle}>Total previsto: {money(draftItems.reduce((sum, item) => sum + item.quantity * item.unit_cost, 0))}</Text> : null}
       <Pressable disabled={busy || !supplierId || draftItems.length === 0} style={[styles.button, busy && styles.disabled]} onPress={addPurchase}><Text style={styles.buttonText}>Registrar compra</Text></Pressable>
       {!products.length ? <Text style={styles.muted}>Cadastre produtos no estoque antes de comprar.</Text> : null}
-    </View>
+    </View> : null}
     <View style={styles.card}><Text style={styles.section}>Recebimentos pendentes</Text>
-      {purchases.filter((purchase) => purchase.status === 'ordered').map((purchase) => <View key={purchase.id} style={styles.listRow}><View style={styles.flex}><Text style={styles.itemTitle}>{purchase.suppliers?.name ?? 'Fornecedor'}</Text><Text style={styles.muted}>Pedido em {new Date(purchase.created_at).toLocaleDateString('pt-BR')} · vencimento {purchase.due_date ?? 'não informado'} · previsto: {paymentMethodLabel(purchase.payment_method) ?? 'não informado'}</Text></View><Pressable disabled={busy} style={styles.smallButton} onPress={() => perform(() => receivePurchase(workshopId, purchase.id))}><Text style={styles.smallButtonText}>Receber</Text></Pressable></View>)}
+      {purchaseCreate && !inventoryCreate ? <Text style={styles.muted}>Para receber compras e atualizar o estoque, o proprietário também precisa liberar “Criar” em Estoque.</Text> : null}
+      {purchases.filter((purchase) => purchase.status === 'ordered').map((purchase) => <View key={purchase.id} style={styles.listRow}><View style={styles.flex}><Text style={styles.itemTitle}>{purchase.suppliers?.name ?? 'Fornecedor'}</Text><Text style={styles.muted}>Pedido em {new Date(purchase.created_at).toLocaleDateString('pt-BR')} · vencimento {purchase.due_date ?? 'não informado'} · previsto: {paymentMethodLabel(purchase.payment_method) ?? 'não informado'}</Text></View>{purchaseCreate && inventoryCreate ? <Pressable disabled={busy} style={styles.smallButton} onPress={() => perform(() => receivePurchase(workshopId, purchase.id))}><Text style={styles.smallButtonText}>Receber</Text></Pressable> : null}</View>)}
       {!purchases.some((purchase) => purchase.status === 'ordered') ? <Text style={styles.muted}>Nenhuma compra aguardando recebimento.</Text> : null}
     </View>
     {financeView ? <View style={styles.card}><Text style={styles.section}>Contas a pagar</Text>

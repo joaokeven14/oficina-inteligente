@@ -6,7 +6,7 @@ import type { ModulePermissions, WorkshopEmployee } from '../types/workshop';
 
 const modules = [
   ['dashboard', 'Painel'], ['clients', 'Clientes'], ['vehicles', 'Veículos'], ['service_orders', 'Ordens de serviço'], ['estimates', 'Orçamentos'],
-  ['inventory', 'Estoque'], ['finance', 'Financeiro'], ['reports', 'Relatórios'], ['employees', 'Funcionários'], ['settings', 'Configurações'],
+  ['inventory', 'Estoque'], ['purchases', 'Compras'], ['finance', 'Financeiro'], ['reports', 'Relatórios'], ['employees', 'Funcionários'], ['settings', 'Configurações'],
 ] as const;
 const emptyPermissions = (): Record<string, ModulePermissions> => Object.fromEntries(modules.map(([module]) => [module, { view: false, create: false, update: false, delete: false }]));
 const actionLabels = [['view', 'Ver'], ['create', 'Criar'], ['update', 'Editar'], ['delete', 'Excluir']] as const;
@@ -87,9 +87,9 @@ export default function EmployeesScreen({ workshopId, isOwner }: { workshopId: s
     <ScrollView contentContainerStyle={styles.list}>
       {employees.map((employee) => <View key={employee.id} style={styles.card}>
         <View style={styles.employeeRow}><View style={styles.flex}><Text style={styles.name}>{employee.profiles.full_name}</Text><Text style={styles.muted}>{employee.status === 'active' ? 'Acesso ativo' : 'Acesso desativado'}</Text></View>
-          {canUpdate ? <Pressable disabled={busy} style={styles.smallButton} onPress={() => editPermissions(employee)}><Text style={styles.smallText}>Permissões</Text></Pressable> : null}
+          {isOwner && canUpdate ? <Pressable disabled={busy} style={styles.smallButton} onPress={() => editPermissions(employee)}><Text style={styles.smallText}>Permissões</Text></Pressable> : null}
         </View>
-        {(canUpdate || canDelete) ? <View style={styles.employeeRow}><Text style={styles.muted}>{employee.workshop_member_permissions.filter((p) => p.can_view).length} módulo(s) visíveis</Text>
+        {(isOwner && (canUpdate || canDelete)) ? <View style={styles.employeeRow}><Text style={styles.muted}>{employee.workshop_member_permissions.filter((p) => p.can_view).length} módulo(s) visíveis</Text>
           {canUpdate ? <Pressable disabled={busy} style={styles.linkButton} onPress={() => toggleStatus(employee)}><Text style={styles.linkText}>{employee.status === 'active' ? 'Desativar' : 'Reativar'}</Text></Pressable> : null}
           {canDelete ? <Pressable disabled={busy} style={styles.linkButton} onPress={() => removeEmployee(employee)}><Text style={styles.deleteText}>Excluir</Text></Pressable> : null}
         </View> : null}
@@ -108,6 +108,7 @@ export default function EmployeesScreen({ workshopId, isOwner }: { workshopId: s
             const enabled = permissions[module]?.[key] ?? false;
             return <Pressable key={key} accessibilityRole="checkbox" accessibilityState={{ checked: enabled }} style={[styles.permissionToggle, enabled && styles.permissionToggleOn]} onPress={() => toggle(module,key)}><Text style={[styles.toggleText,enabled && styles.toggleTextOn]}>{enabled ? '✓' : '—'}</Text></Pressable>;
           })}</View>)}
+          <Text style={styles.muted}>Compras começa sem acesso. Somente o proprietário pode liberar essa área. Para receber uma compra, também conceda “Criar” em Estoque.</Text>
           <Text style={styles.muted}>Administradores da plataforma e proprietários da oficina não podem ser criados como funcionários por esta tela.</Text>
           <Pressable disabled={busy || (!selected && (!fullName.trim() || !email.trim()))} style={[styles.primary, styles.saveButton, busy && styles.disabled]} onPress={() => { save(); }}><Text style={styles.primaryText}>{busy ? 'Salvando…' : selected ? 'Salvar permissões' : 'Enviar convite'}</Text></Pressable>
         </ScrollView>

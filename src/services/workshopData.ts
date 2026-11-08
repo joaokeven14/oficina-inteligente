@@ -135,6 +135,7 @@ export async function getWorkshopPermissions(workshopId: string, client?: Supaba
     vehicles: { view: false, create: false, update: false, delete: false },
     service_orders: { view: false, create: false, update: false, delete: false },
     inventory: { view: false, create: false, update: false, delete: false },
+    purchases: { view: false, create: false, update: false, delete: false },
     finance: { view: false, create: false, update: false, delete: false },
     estimates: { view: false, create: false, update: false, delete: false },
     dashboard: { view: false, create: false, update: false, delete: false },
@@ -194,7 +195,7 @@ export async function listVehicles(workshopId: string, client?: SupabaseClient):
   const supabase = clientOrDefault(client);
   const data = await fetchAllPages((from, to) => supabase
     .from('vehicles')
-    .select('id, workshop_id, customer_id, make, model, year_manufacture, model_year, plate, color, mileage_km, fuel, chassis, notes, created_at, updated_at, customers!inner(full_name)')
+    .select('id, workshop_id, customer_id, vehicle_type, make, model, year_manufacture, model_year, plate, color, mileage_km, fuel, chassis, notes, created_at, updated_at, customers!inner(full_name)')
     .eq('workshop_id', workshopId)
     .is('archived_at', null)
     .order('plate', { ascending: true }).order('id', { ascending: true }).range(from, to));

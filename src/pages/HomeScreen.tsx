@@ -53,6 +53,10 @@ export default function HomeScreen({ onSignOut, initialTab = 'Início' }: { onSi
   }, [activeTab, loading, platformAdmin]);
 
   useEffect(() => {
+    if (!loading && activeTab === 'Compras' && !permissions?.purchases?.view) setActiveTab('Início');
+  }, [activeTab, loading, permissions]);
+
+  useEffect(() => {
     let active = true;
     setPermissions(null); setMetrics(null); setFinanceMetrics(null);
     if (!workshop) return () => { active = false; };
@@ -75,7 +79,7 @@ export default function HomeScreen({ onSignOut, initialTab = 'Início' }: { onSi
     ...(permissions?.vehicles.view ? ['Veículos' as const] : []),
     ...(permissions?.service_orders.view ? ['Ordens' as const] : []),
     ...(permissions?.inventory.view ? ['Estoque' as const] : []),
-    ...(permissions?.inventory.view ? ['Compras' as const] : []),
+    ...(permissions?.purchases?.view ? ['Compras' as const] : []),
     ...(permissions?.finance.view ? ['Financeiro' as const] : []),
     ...(permissions?.estimates.view ? ['Orçamentos' as const] : []),
     ...(permissions?.service_orders.view ? ['Pós-venda' as const] : []),

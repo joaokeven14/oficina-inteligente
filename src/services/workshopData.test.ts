@@ -10,7 +10,7 @@ const validCustomer: CustomerInput = {
 };
 
 const validVehicle: VehicleInput = {
-  customer_id: '00000000-0000-4000-8000-000000000001', make: 'Ford', model: 'Ka',
+  customer_id: '00000000-0000-4000-8000-000000000001', vehicle_type: 'cars', make: 'Ford', model: 'Ka',
   year_manufacture: 2020, model_year: 2021, plate: 'ABC1D23', color: null,
   mileage_km: null, fuel: 'flex', chassis: null, notes: null,
 };

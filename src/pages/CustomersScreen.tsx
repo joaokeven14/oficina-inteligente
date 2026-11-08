@@ -97,6 +97,7 @@ export default function CustomersScreen({ workshopId }: { workshopId: string }) 
           <ScrollView contentContainerStyle={styles.formContent} keyboardShouldPersistTaps="handled">
             <FormField label="Nome completo" required value={form.full_name} onChangeText={(value) => set('full_name', value)} />
             <FormField label="CPF ou CNPJ" value={form.document ?? ''} onChangeText={(value) => set('document', value)} keyboardType="number-pad" />
+            <Text style={styles.lookupHint}>Não fazemos consulta automática pelo CPF/CNPJ. Preencha os demais dados do cliente manualmente.</Text>
             <FormField label="Telefone" value={form.phone ?? ''} onChangeText={(value) => set('phone', value)} keyboardType="phone-pad" />
             <FormField label="WhatsApp" value={form.whatsapp ?? ''} onChangeText={(value) => set('whatsapp', value)} keyboardType="phone-pad" />
             <FormField label="E-mail" value={form.email ?? ''} onChangeText={(value) => set('email', value)} keyboardType="email-address" />
@@ -136,6 +137,7 @@ const styles = StyleSheet.create({
   modalHeader: { minHeight: 56, flexDirection: 'row', alignItems: 'center' },
   cancelText: { padding: 8, color: '#315a80', fontSize: 12, fontWeight: '700' },
   formContent: { paddingBottom: 34 },
+  lookupHint: { marginTop: 5, color: '#77879a', fontSize: 10, lineHeight: 15 },
   twoColumns: { flexDirection: 'row', gap: 12 },
   column: { flex: 1 },
   stateField: { width: 74 },
