@@ -64,18 +64,24 @@ export default function HomeScreen({ onSignOut, initialTab = 'Início' }: { onSi
     let active = true;
     setPermissions(null); setMetrics(null); setFinanceMetrics(null);
     if (!workshop) return () => { active = false; };
-    getWorkshopPermissions(workshop.workshopId).then(async (access) => {
-      if (!active) return;
-      setPermissions(access);
-      if (access.dashboard.view) {
-        const dashboard = await getDashboardMetrics(workshop.workshopId);
-        if (!active) return;
-        setMetrics(dashboard);
-        if (access.finance.view) setFinanceMetrics(await getFinanceDashboardMetrics(workshop.workshopId));
-      }
-    }).catch((reason: unknown) => { if (active) setLoadError(reason instanceof Error ? reason.message : 'Não foi possível carregar os dados da oficina.'); });
+    getWorkshopPermissions(workshop.workshopId)
+      .then((access) => { if (active) setPermissions(access); })
+      .catch((reason: unknown) => { if (active) setLoadError(reason instanceof Error ? reason.message : 'Não foi possível carregar os dados da oficina.'); });
     return () => { active = false; };
   }, [workshop]);
+
+  useEffect(() => {
+    if (activeTab !== 'Início' || !workshop || !permissions?.dashboard.view) return;
+    let active = true;
+    Promise.all([
+      getDashboardMetrics(workshop.workshopId),
+      permissions.finance.view ? getFinanceDashboardMetrics(workshop.workshopId) : Promise.resolve(null),
+    ]).then(([dashboard, finance]) => {
+      if (!active) return;
+      setMetrics(dashboard); setFinanceMetrics(finance); setLoadError('');
+    }).catch((reason: unknown) => { if (active) setLoadError(reason instanceof Error ? reason.message : 'Não foi possível atualizar o painel da oficina.'); });
+    return () => { active = false; };
+  }, [activeTab, permissions, workshop]);
 
   const visibleTabs: Tab[] = !workshop && platformAdmin ? ['Admin'] : [
     'Início',
