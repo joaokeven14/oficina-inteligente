@@ -50,6 +50,7 @@ export default function VehiclesScreen({ workshopId }: { workshopId: string }) {
   const [error, setError] = useState('');
   const [query, setQuery] = useState('');
   const [customerSearch, setCustomerSearch] = useState('');
+  const [customerPickerOpen, setCustomerPickerOpen] = useState(false);
   const [selected, setSelected] = useState<Vehicle | null>(null);
   const [form, setForm] = useState<VehicleInput>(emptyVehicle);
   const [brands, setBrands] = useState<VehicleCatalogOption[]>([]);
@@ -137,9 +138,10 @@ export default function VehiclesScreen({ workshopId }: { workshopId: string }) {
       return name.includes(search) || (documentDigits.length > 0 && document.includes(documentDigits));
     });
   }, [customers, customerSearch]);
+  const selectedCustomer = customers.find((customer) => customer.id === form.customer_id) ?? null;
 
-  const beginCreate = () => { setForm(emptyVehicle); setCustomerSearch(''); setSelected({ id: '__new__' } as Vehicle); setError(''); };
-  const beginEdit = (vehicle: Vehicle) => { setForm(toInput(vehicle)); setCustomerSearch(''); setSelected(vehicle); setError(''); };
+  const beginCreate = () => { setForm(emptyVehicle); setCustomerSearch(''); setCustomerPickerOpen(false); setSelected({ id: '__new__' } as Vehicle); setError(''); };
+  const beginEdit = (vehicle: Vehicle) => { setForm(toInput(vehicle)); setCustomerSearch(''); setCustomerPickerOpen(false); setSelected(vehicle); setError(''); };
   const closeForm = () => { if (!busy) setSelected(null); };
   const set = (key: keyof VehicleInput, value: string) => setForm((current) => ({
     ...current,
@@ -213,11 +215,29 @@ export default function VehiclesScreen({ workshopId }: { workshopId: string }) {
           <ScrollView contentContainerStyle={styles.formContent} keyboardShouldPersistTaps="handled">
             <Text style={styles.label}>Cliente *</Text>
             {customers.length ? <>
-              <FormField label="Pesquisar cliente por nome ou CPF" value={customerSearch} onChangeText={setCustomerSearch} placeholder="Digite o nome ou CPF" />
-              {matchingCustomers.length ? matchingCustomers.map((customer) => {
-              const active = form.customer_id === customer.id;
-              return <Pressable key={customer.id} accessibilityRole="radio" accessibilityState={{ selected: active }} style={[styles.customerChoice, active && styles.customerChoiceActive]} onPress={() => setForm((current) => ({ ...current, customer_id: customer.id }))}><Text style={[styles.customerChoiceText, active && styles.customerChoiceTextActive]}>{customer.full_name}{customer.document ? ` · ${customer.document}` : ''}</Text></Pressable>;
-              }) : <Text style={styles.noCustomers}>Nenhum cliente encontrado. Confira o nome ou CPF digitado.</Text>}
+              {selectedCustomer ? <View style={styles.selectedCustomerCard}>
+                <View style={styles.selectedCustomerInfo}>
+                  <Text style={styles.selectedCustomerCaption}>Cliente vinculado</Text>
+                  <Text style={styles.selectedCustomerName}>{selectedCustomer.full_name}</Text>
+                  {selectedCustomer.document ? <Text style={styles.selectedCustomerDocument}>{selectedCustomer.document}</Text> : null}
+                </View>
+                <Pressable accessibilityRole="button" style={styles.changeCustomerButton} onPress={() => { setCustomerPickerOpen((open) => !open); setCustomerSearch(''); }}>
+                  <Text style={styles.changeCustomerText}>{customerPickerOpen ? 'Fechar' : 'Trocar cliente'}</Text>
+                </Pressable>
+              </View> : <Pressable accessibilityRole="button" style={styles.selectCustomerButton} onPress={() => { setCustomerPickerOpen(true); setCustomerSearch(''); }}>
+                <Text style={styles.selectCustomerText}>Selecionar cliente</Text>
+              </Pressable>}
+              {customerPickerOpen ? <View style={styles.customerPicker}>
+                <View style={styles.customerPickerHeader}>
+                  <Text style={styles.customerPickerTitle}>Buscar cliente</Text>
+                  <Pressable accessibilityRole="button" onPress={() => { setCustomerPickerOpen(false); setCustomerSearch(''); }}><Text style={styles.changeCustomerText}>Fechar busca</Text></Pressable>
+                </View>
+                <FormField label="Pesquisar por nome ou CPF" value={customerSearch} onChangeText={setCustomerSearch} placeholder="Digite o nome ou CPF" />
+                {matchingCustomers.length ? matchingCustomers.map((customer) => <Pressable key={customer.id} accessibilityRole="button" style={styles.customerChoice} onPress={() => { setForm((current) => ({ ...current, customer_id: customer.id })); setCustomerPickerOpen(false); setCustomerSearch(''); }}>
+                  <Text style={styles.customerChoiceText}>{customer.full_name}</Text>
+                  {customer.document ? <Text style={styles.selectedCustomerDocument}>{customer.document}</Text> : null}
+                </Pressable>) : <Text style={styles.noCustomers}>Nenhum cliente encontrado. Confira o nome ou CPF digitado.</Text>}
+              </View> : null}
             </> : <Text style={styles.noCustomers}>Cadastre um cliente antes de incluir o veículo.</Text>}
             <Text style={styles.label}>Tipo de veículo *</Text>
             <View style={styles.typeChoices}>{vehicleTypes.map((option) => { const active = form.vehicle_type === option.value; return <Pressable key={option.value} accessibilityRole="radio" accessibilityState={{ selected: active }} style={[styles.typeChoice, active && styles.typeChoiceActive]} onPress={() => chooseVehicleType(option.value)}><Text style={[styles.typeChoiceText, active && styles.typeChoiceTextActive]}>{option.label}</Text></Pressable>; })}</View>
@@ -302,10 +322,20 @@ const styles = StyleSheet.create({
   cancelText: { padding: 8, color: '#315a80', fontSize: 12, fontWeight: '700' },
   formContent: { paddingBottom: 34 },
   label: { marginTop: 14, marginBottom: 6, color: '#33465b', fontSize: 12, fontWeight: '700' },
+  selectedCustomerCard: { minHeight: 64, paddingHorizontal: 12, paddingVertical: 10, flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: 1, borderColor: '#d8e5db', borderRadius: 9, backgroundColor: '#f5fbf5' },
+  selectedCustomerInfo: { flex: 1 },
+  selectedCustomerCaption: { color: '#5e7967', fontSize: 10, fontWeight: '600' },
+  selectedCustomerName: { marginTop: 2, color: '#1d3d2a', fontSize: 13, fontWeight: '700' },
+  selectedCustomerDocument: { marginTop: 2, color: '#718197', fontSize: 11 },
+  changeCustomerButton: { paddingVertical: 8, paddingHorizontal: 9, borderRadius: 7, backgroundColor: '#e8f0e9' },
+  changeCustomerText: { color: '#315a80', fontSize: 11, fontWeight: '700' },
+  selectCustomerButton: { minHeight: 42, paddingHorizontal: 12, justifyContent: 'center', borderWidth: 1, borderStyle: 'dashed', borderColor: '#b8c5d3', borderRadius: 9, backgroundColor: '#fff' },
+  selectCustomerText: { color: '#315a80', fontSize: 12, fontWeight: '700' },
+  customerPicker: { marginTop: 8, padding: 10, borderWidth: 1, borderColor: '#dce3eb', borderRadius: 9, backgroundColor: '#fff' },
+  customerPickerHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  customerPickerTitle: { color: '#33465b', fontSize: 12, fontWeight: '700' },
   customerChoice: { padding: 11, borderWidth: 1, borderColor: '#dce3eb', borderRadius: 8, backgroundColor: '#fff', marginBottom: 6 },
-  customerChoiceActive: { borderColor: '#e97824', backgroundColor: '#fff5ed' },
   customerChoiceText: { color: '#41536a', fontSize: 12 },
-  customerChoiceTextActive: { color: '#9d4b12', fontWeight: '700' },
   noCustomers: { padding: 10, color: '#9d4b3c', fontSize: 12 },
   typeChoices: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
   typeChoice: { paddingVertical: 8, paddingHorizontal: 11, borderRadius: 8, borderWidth: 1, borderColor: '#dce3eb', backgroundColor: '#fff' },
