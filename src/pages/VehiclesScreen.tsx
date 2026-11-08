@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import FormField from '../components/FormField';
 import { archiveVehicle, getWorkshopPermissions, listCustomers, listVehicles, saveVehicle } from '../services/workshopData';
-import { listVehicleBrands, listVehicleModels, listVehicleYears, type VehicleCatalogOption, type VehicleCatalogType } from '../services/vehicleCatalog';
+import { listVehicleBrands, listVehicleModels, listVehicleYears, vehicleBrandKey, type VehicleCatalogOption, type VehicleCatalogType } from '../services/vehicleCatalog';
 import type { Customer, ModulePermissions, Vehicle, VehicleInput } from '../types/workshop';
 
 const emptyVehicle: VehicleInput = {
@@ -16,7 +16,7 @@ function toInput(vehicle: Vehicle): VehicleInput {
 }
 
 const vehicleTypes: { value: VehicleCatalogType; label: string }[] = [
-  { value: 'cars', label: 'Carro' }, { value: 'motorcycles', label: 'Moto' }, { value: 'trucks', label: 'Caminhão' },
+  { value: 'cars', label: 'Carro' }, { value: 'motorcycles', label: 'Moto' }, { value: 'trucks', label: 'Caminhão, carreta ou semirreboque' },
 ];
 
 function catalogKey(value: string) {
@@ -89,7 +89,7 @@ export default function VehiclesScreen({ workshopId }: { workshopId: string }) {
 
   useEffect(() => {
     if (!isEditing || !brands.length) return;
-    const matched = brands.find((option) => catalogKey(option.name) === catalogKey(form.make));
+    const matched = brands.find((option) => vehicleBrandKey(option.name) === vehicleBrandKey(form.make));
     if (matched) setBrandCode(matched.code);
   }, [brands, form.make, isEditing]);
 
@@ -211,7 +211,7 @@ export default function VehiclesScreen({ workshopId }: { workshopId: string }) {
             <CatalogAutocomplete label="Modelo" required value={form.model} options={models} loading={catalogLoading === 'models'} onChangeText={typeModel} onSelect={(option) => { setModelCode(option.code); setYearChoice(''); setForm((current) => ({ ...current, model: option.name, model_year: null, fuel: null })); }} placeholder={brandCode ? 'Escolha o modelo desta marca' : 'Escolha uma marca ou digite manualmente'} />
             <FormField label="Placa" required value={form.plate} onChangeText={(value) => set('plate', value.toUpperCase())} placeholder="ABC1D23" />
             <View style={styles.twoColumns}><View style={styles.column}><FormField label="Ano de fabricação" value={form.year_manufacture?.toString() ?? ''} onChangeText={(value) => set('year_manufacture', value)} keyboardType="number-pad" /></View><View style={styles.column}><CatalogAutocomplete label="Ano do modelo" value={yearChoice || form.model_year?.toString() || ''} options={modelYears} loading={catalogLoading === 'years'} onChangeText={(value) => { setYearChoice(''); set('model_year', value); }} onSelect={chooseYear} placeholder="Escolha na lista ou digite o ano" /></View></View>
-            <Text style={styles.catalogHint}>Marcas, modelos e anos vêm do catálogo de veículos. Se não encontrar uma opção, digite manualmente. A placa não consulta nenhum serviço externo.</Text>
+            <Text style={styles.catalogHint}>A lista reúne marcas do catálogo de referência e marcas adicionais. Se não houver modelo ou ano disponível, digite manualmente. A placa não consulta nenhum serviço externo.</Text>
             <View style={styles.twoColumns}><View style={styles.column}><FormField label="Cor" value={form.color ?? ''} onChangeText={(value) => set('color', value)} /></View><View style={styles.column}><FormField label="Quilometragem" value={form.mileage_km?.toString() ?? ''} onChangeText={(value) => set('mileage_km', value)} keyboardType="number-pad" /></View></View>
             <Text style={[styles.label, styles.fuelHeading]}>Combustível</Text>
             <View style={styles.fuelChoices}>{fuelOptions.map((option) => { const active = form.fuel === option.value; return <Pressable key={option.value} accessibilityRole="radio" accessibilityState={{ selected: active }} style={[styles.fuelChoice, active && styles.fuelChoiceActive]} onPress={() => setForm((current) => ({ ...current, fuel: option.value }))}><Text style={[styles.fuelChoiceText, active && styles.fuelChoiceTextActive]}>{option.label}</Text></Pressable>; })}</View>
@@ -254,6 +254,7 @@ function CatalogAutocomplete({ label, value, options, loading, onChangeText, onS
     />
     {loading ? <Text style={styles.catalogStatus}>Carregando opções…</Text> : null}
     {open && !loading && visible.length ? <View style={styles.catalogOptions}><ScrollView nestedScrollEnabled style={styles.catalogOptionsScroll} keyboardShouldPersistTaps="handled">{visible.map((option) => <Pressable key={option.code} accessibilityRole="button" style={styles.catalogOption} onPress={() => { onSelect(option); setOpen(false); }}><Text style={styles.catalogOptionText}>{option.name}</Text></Pressable>)}</ScrollView></View> : null}
+    {open && !loading && !options.length ? <Text style={styles.catalogStatus}>{label === 'Modelo' ? 'Não há modelos desta marca no catálogo. Digite o modelo manualmente.' : 'Nenhuma opção carregada. Você pode digitar manualmente.'}</Text> : null}
     {open && !loading && options.length > 0 && !visible.length ? <Text style={styles.catalogStatus}>Nenhuma opção encontrada. Você pode manter o texto digitado.</Text> : null}
   </View>;
 }
