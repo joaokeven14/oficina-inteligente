@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import FormField from '../components/FormField';
 import { archiveSupplier, createPurchase, getWorkshopPermissions, listInventoryProducts, listPayablePaymentReversals, listPayables, listPurchases, listSuppliers, markPayablePaid, receivePurchase, reversePayablePayment, saveSupplier } from '../services/workshopData';
@@ -7,6 +7,8 @@ import { paymentMethodLabel, paymentMethods } from '../utils/paymentMethods';
 import type { PaymentMethod } from '../utils/paymentMethods';
 
 const money = (amount: number | string) => `R$ ${Number(amount).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+const searchKey = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLocaleLowerCase('pt-BR');
+const compactSearchKey = (value: string) => searchKey(value).replace(/[^a-z0-9]/g, '');
 export default function PurchasesScreen({ workshopId }: { workshopId: string }) {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [products, setProducts] = useState<InventoryProduct[]>([]);
@@ -39,6 +41,8 @@ export default function PurchasesScreen({ workshopId }: { workshopId: string }) 
   const [dueDate, setDueDate] = useState('');
   const [supplierId, setSupplierId] = useState('');
   const [productId, setProductId] = useState('');
+  const [supplierSearch, setSupplierSearch] = useState('');
+  const [productSearch, setProductSearch] = useState('');
   const [draftItems, setDraftItems] = useState<Array<{ product_id: string; quantity: number; unit_cost: number }>>([]);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -68,11 +72,30 @@ export default function PurchasesScreen({ workshopId }: { workshopId: string }) 
       ]);
       const [payableRows, reversalRows] = permissions.finance.view ? await Promise.all([listPayables(workshopId), listPayablePaymentReversals(workshopId)]) : [[], []];
       setSuppliers(vendorRows); setProducts(productRows); setPurchases(purchaseRows); setPayables(payableRows); setPayableReversals(reversalRows);
-      setSupplierId((current) => current || vendorRows[0]?.id || ''); setProductId((current) => current || productRows[0]?.id || '');
+      setSupplierId((current) => current || vendorRows[0]?.id || ''); setProductId((current) => current || '');
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Não foi possível carregar compras.'); }
     finally { setLoading(false); }
   }, [workshopId]);
   useEffect(() => { refresh(); }, [refresh]);
+
+  const selectedSupplier = suppliers.find((supplier) => supplier.id === supplierId) ?? null;
+  const selectedProduct = products.find((product) => product.id === productId) ?? null;
+  const matchingSuppliers = useMemo(() => {
+    const query = searchKey(supplierSearch);
+    const compactQuery = compactSearchKey(supplierSearch);
+    if (!query) return suppliers;
+    return suppliers.filter((supplier) => [supplier.name, supplier.cnpj ?? '', supplier.phone ?? '', supplier.email ?? '', supplier.contact_name ?? '']
+      .some((value) => searchKey(value).includes(query) || (compactQuery && compactSearchKey(value).includes(compactQuery))));
+  }, [supplierSearch, suppliers]);
+  const matchingProducts = useMemo(() => {
+    const query = searchKey(productSearch);
+    const compactQuery = compactSearchKey(productSearch);
+    if (!query) return products;
+    return products.filter((product) => [product.name, product.code ?? '', product.brand ?? '', product.category ?? '', product.location ?? '']
+      .some((value) => searchKey(value).includes(query) || (compactQuery && compactSearchKey(value).includes(compactQuery))));
+  }, [productSearch, products]);
+  const displayedSuppliers = matchingSuppliers.slice(0, 30);
+  const displayedProducts = matchingProducts.slice(0, 30);
 
   const perform = async (task: () => Promise<void>) => {
     setBusy(true); setError('');
@@ -133,10 +156,16 @@ export default function PurchasesScreen({ workshopId }: { workshopId: string }) 
     </View>
     {purchaseCreate ? <View style={styles.card}>
       <Text style={styles.section}>Nova compra</Text>
-      <Text style={styles.label}>Fornecedor</Text>
-      <View style={styles.chips}>{suppliers.map((supplier) => <Pressable key={supplier.id} style={[styles.chip, supplierId === supplier.id && styles.chipSelected]} onPress={() => setSupplierId(supplier.id)}><Text style={[styles.chipText, supplierId === supplier.id && styles.chipTextSelected]}>{supplier.name}</Text></Pressable>)}</View>
-      <Text style={styles.label}>Produto</Text>
-      <View style={styles.chips}>{products.map((product) => <Pressable key={product.id} style={[styles.chip, productId === product.id && styles.chipSelected]} onPress={() => { setProductId(product.id); setUnitCost(String(product.cost_price)); }}><Text style={[styles.chipText, productId === product.id && styles.chipTextSelected]}>{product.name}</Text></Pressable>)}</View>
+      <FormField label="Pesquisar fornecedor por nome, CNPJ, telefone ou contato" value={supplierSearch} onChangeText={setSupplierSearch} placeholder="Digite para localizar o fornecedor" />
+      {selectedSupplier ? <Text style={[styles.muted, { color: '#315a80', fontWeight: '700' }]}>Fornecedor selecionado: {selectedSupplier.name}</Text> : null}
+      <View style={styles.chips}>{displayedSuppliers.map((supplier) => <Pressable key={supplier.id} accessibilityRole="button" accessibilityState={{ selected: supplierId === supplier.id }} style={[styles.chip, supplierId === supplier.id && styles.chipSelected]} onPress={() => setSupplierId(supplier.id)}><Text style={[styles.chipText, supplierId === supplier.id && styles.chipTextSelected]}>{supplier.name}</Text></Pressable>)}</View>
+      {matchingSuppliers.length > displayedSuppliers.length ? <Text style={styles.muted}>Mostrando 30 fornecedores. Digite mais dados para refinar.</Text> : null}
+      {supplierSearch.trim() && !matchingSuppliers.length ? <Text style={styles.muted}>Nenhum fornecedor encontrado com esses dados.</Text> : null}
+      <FormField label="Pesquisar produto por nome, código, marca ou categoria" value={productSearch} onChangeText={setProductSearch} placeholder="Digite para localizar o produto" />
+      {selectedProduct ? <Text style={[styles.muted, { color: '#315a80', fontWeight: '700' }]}>Produto selecionado: {selectedProduct.name}</Text> : null}
+      <View style={styles.chips}>{displayedProducts.map((product) => <Pressable key={product.id} accessibilityRole="button" accessibilityState={{ selected: productId === product.id }} style={[styles.chip, productId === product.id && styles.chipSelected]} onPress={() => { setProductId(product.id); setUnitCost(String(product.cost_price)); }}><Text style={[styles.chipText, productId === product.id && styles.chipTextSelected]}>{product.name}{product.code ? ` · ${product.code}` : ''}</Text></Pressable>)}</View>
+      {matchingProducts.length > displayedProducts.length ? <Text style={styles.muted}>Mostrando 30 produtos. Digite mais dados para refinar.</Text> : null}
+      {productSearch.trim() && !matchingProducts.length ? <Text style={styles.muted}>Nenhum produto encontrado com esses dados.</Text> : null}
       <View style={styles.row}><View style={styles.half}><FormField label="Quantidade" required value={quantity} onChangeText={setQuantity} keyboardType="decimal-pad" /></View><View style={styles.half}><FormField label="Custo unitário (R$)" required value={unitCost} onChangeText={setUnitCost} keyboardType="decimal-pad" /></View></View>
       <FormField label="Vencimento (AAAA-MM-DD)" value={dueDate} onChangeText={setDueDate} placeholder="2026-12-31" />
       <Text style={styles.label}>Forma de pagamento prevista</Text>
