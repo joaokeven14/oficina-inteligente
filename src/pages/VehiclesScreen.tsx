@@ -49,6 +49,7 @@ export default function VehiclesScreen({ workshopId }: { workshopId: string }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [query, setQuery] = useState('');
+  const [customerSearch, setCustomerSearch] = useState('');
   const [selected, setSelected] = useState<Vehicle | null>(null);
   const [form, setForm] = useState<VehicleInput>(emptyVehicle);
   const [brands, setBrands] = useState<VehicleCatalogOption[]>([]);
@@ -126,8 +127,19 @@ export default function VehiclesScreen({ workshopId }: { workshopId: string }) {
       .some((value) => value?.toLocaleLowerCase('pt-BR').includes(normalized)));
   }, [vehicles, query]);
 
-  const beginCreate = () => { setForm(emptyVehicle); setSelected({ id: '__new__' } as Vehicle); setError(''); };
-  const beginEdit = (vehicle: Vehicle) => { setForm(toInput(vehicle)); setSelected(vehicle); setError(''); };
+  const matchingCustomers = useMemo(() => {
+    const search = customerSearch.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLocaleLowerCase('pt-BR');
+    const documentDigits = customerSearch.replace(/\D/g, '');
+    if (!search) return customers;
+    return customers.filter((customer) => {
+      const name = customer.full_name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('pt-BR');
+      const document = customer.document?.replace(/\D/g, '') ?? '';
+      return name.includes(search) || (documentDigits.length > 0 && document.includes(documentDigits));
+    });
+  }, [customers, customerSearch]);
+
+  const beginCreate = () => { setForm(emptyVehicle); setCustomerSearch(''); setSelected({ id: '__new__' } as Vehicle); setError(''); };
+  const beginEdit = (vehicle: Vehicle) => { setForm(toInput(vehicle)); setCustomerSearch(''); setSelected(vehicle); setError(''); };
   const closeForm = () => { if (!busy) setSelected(null); };
   const set = (key: keyof VehicleInput, value: string) => setForm((current) => ({
     ...current,
@@ -200,10 +212,13 @@ export default function VehiclesScreen({ workshopId }: { workshopId: string }) {
           {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
           <ScrollView contentContainerStyle={styles.formContent} keyboardShouldPersistTaps="handled">
             <Text style={styles.label}>Cliente *</Text>
-            {customers.length ? customers.map((customer) => {
+            {customers.length ? <>
+              <FormField label="Pesquisar cliente por nome ou CPF" value={customerSearch} onChangeText={setCustomerSearch} placeholder="Digite o nome ou CPF" />
+              {matchingCustomers.length ? matchingCustomers.map((customer) => {
               const active = form.customer_id === customer.id;
               return <Pressable key={customer.id} accessibilityRole="radio" accessibilityState={{ selected: active }} style={[styles.customerChoice, active && styles.customerChoiceActive]} onPress={() => setForm((current) => ({ ...current, customer_id: customer.id }))}><Text style={[styles.customerChoiceText, active && styles.customerChoiceTextActive]}>{customer.full_name}{customer.document ? ` · ${customer.document}` : ''}</Text></Pressable>;
-            }) : <Text style={styles.noCustomers}>Cadastre um cliente antes de incluir o veículo.</Text>}
+              }) : <Text style={styles.noCustomers}>Nenhum cliente encontrado. Confira o nome ou CPF digitado.</Text>}
+            </> : <Text style={styles.noCustomers}>Cadastre um cliente antes de incluir o veículo.</Text>}
             <Text style={styles.label}>Tipo de veículo *</Text>
             <View style={styles.typeChoices}>{vehicleTypes.map((option) => { const active = form.vehicle_type === option.value; return <Pressable key={option.value} accessibilityRole="radio" accessibilityState={{ selected: active }} style={[styles.typeChoice, active && styles.typeChoiceActive]} onPress={() => chooseVehicleType(option.value)}><Text style={[styles.typeChoiceText, active && styles.typeChoiceTextActive]}>{option.label}</Text></Pressable>; })}</View>
             {catalogError ? <Text accessibilityRole="alert" style={styles.catalogError}>{catalogError}</Text> : null}
