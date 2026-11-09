@@ -8,8 +8,8 @@ export type WorkshopContext = {
 export type WorkshopSettings = { id: string; name: string; logo_path: string | null; logo_url: string | null; cnpj: string | null; phone: string | null; whatsapp: string | null; email: string | null; address: string | null; city: string | null; state: string | null; responsible_name: string | null; opening_hours: string | null };
 export type WorkshopSettingsInput = Omit<WorkshopSettings, 'id' | 'logo_path' | 'logo_url'>;
 
-export type ModulePermissions = { view: boolean; create: boolean; update: boolean; delete: boolean };
-export type WorkshopPermissions = Record<'dashboard' | 'clients' | 'vehicles' | 'service_orders' | 'inventory' | 'finance' | 'estimates' | 'employees' | 'reports' | 'settings', ModulePermissions> & { purchases?: ModulePermissions; after_sales?: ModulePermissions };
+export type ModulePermissions = { view: boolean; create: boolean; update: boolean; delete: boolean; discountLimitPercent?: number };
+export type WorkshopPermissions = Record<'dashboard' | 'clients' | 'vehicles' | 'service_orders' | 'inventory' | 'finance' | 'estimates' | 'employees' | 'reports' | 'settings', ModulePermissions> & { purchases?: ModulePermissions; after_sales?: ModulePermissions; service_order_discount?: ModulePermissions; service_order_discount_limited?: ModulePermissions };
 
 export type Customer = {
   id: string;
@@ -151,7 +151,7 @@ export type DashboardMetrics = { customers: number; vehicles: number; orders_ope
 export type FinanceDashboardMetrics = { receivables_pending: number; receivables_overdue: number; received_this_month: number; expenses_this_month: number; profit_this_month: number; estimates_approved: number };
 export type MaintenanceReminder = { id: string; workshop_id: string; vehicle_id: string; customer_id: string; title: string; due_date: string | null; due_odometer_km: number | null; notes: string; completed_at: string | null; created_at: string; vehicles?: { make: string; model: string; plate: string } };
 export type ServiceWarranty = { id: string; workshop_id: string; service_order_id: string; description: string; starts_on: string; duration_days: number; ends_on: string; conditions: string; voided_at: string | null; created_at: string; service_orders?: { order_number: number; customers: { full_name: string; document?: string | null }; vehicles: { make: string; model: string; plate: string } } };
-export type WorkshopEmployeePermission = { module: string; can_view: boolean; can_create: boolean; can_update: boolean; can_delete: boolean };
+export type WorkshopEmployeePermission = { module: string; can_view: boolean; can_create: boolean; can_update: boolean; can_delete: boolean; discount_limit_percent: number };
 export type WorkshopEmployee = { id: string; workshop_id: string; user_id: string; role: 'staff'; status: 'active' | 'disabled'; profiles: { full_name: string }; workshop_member_permissions: WorkshopEmployeePermission[] };
 export type ServiceOrderTimeEntry = { id: string; workshop_id: string; service_order_id: string; membership_id: string; started_at: string; ended_at: string | null };
 export type EmployeeProductivity = { membership_id: string; full_name: string; orders_delivered: number | string; labor_value: number | string; minutes_logged: number | string };

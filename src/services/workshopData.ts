@@ -157,8 +157,15 @@ export async function saveWorkshopSettings(workshopId: string, settings: Worksho
 }
 
 export async function getWorkshopPermissions(workshopId: string, client?: SupabaseClient): Promise<WorkshopPermissions> {
-  const { data, error } = await clientOrDefault(client).rpc('get_workshop_permissions', { target_workshop_id: workshopId });
+  const supabase = clientOrDefault(client);
+  const [permissionResult, discountLimitResult] = await Promise.all([
+    supabase.rpc('get_workshop_permissions', { target_workshop_id: workshopId }),
+    supabase.from('workshop_member_permissions').select('discount_limit_percent')
+      .eq('workshop_id', workshopId).eq('module', 'service_order_discount_limited').maybeSingle(),
+  ]);
+  const { data, error } = permissionResult;
   if (error) throwFriendly(error);
+  if (discountLimitResult.error) throwFriendly(discountLimitResult.error);
   const permissions: WorkshopPermissions = {
     clients: { view: false, create: false, update: false, delete: false },
     vehicles: { view: false, create: false, update: false, delete: false },
@@ -172,12 +179,18 @@ export async function getWorkshopPermissions(workshopId: string, client?: Supaba
     employees: { view: false, create: false, update: false, delete: false },
     reports: { view: false, create: false, update: false, delete: false },
     settings: { view: false, create: false, update: false, delete: false },
+      service_order_discount: { view: false, create: false, update: false, delete: false },
+      service_order_discount_limited: { view: false, create: false, update: false, delete: false, discountLimitPercent: 0 },
   };
   for (const row of (data ?? []) as Array<{ module: keyof WorkshopPermissions; can_view: boolean; can_create: boolean; can_update: boolean; can_delete: boolean }>) {
     if (row.module in permissions) {
       permissions[row.module] = { view: row.can_view, create: row.can_create, update: row.can_update, delete: row.can_delete };
     }
   }
+    permissions.service_order_discount_limited = {
+      ...(permissions.service_order_discount_limited ?? { view: false, create: false, update: false, delete: false }),
+      discountLimitPercent: Number(discountLimitResult.data?.discount_limit_percent ?? 0),
+    };
   return permissions;
 }
 
@@ -904,7 +917,7 @@ export async function listWorkshopEmployees(workshopId: string, client?: Supabas
   const memberIds = rows.map((row) => row.id);
   const [profiles, permissions] = await Promise.all([
     supabase.from('profiles').select('user_id,full_name').in('user_id', ids),
-    supabase.from('workshop_member_permissions').select('membership_id,module,can_view,can_create,can_update,can_delete').in('membership_id', memberIds),
+      supabase.from('workshop_member_permissions').select('membership_id,module,can_view,can_create,can_update,can_delete,discount_limit_percent').in('membership_id', memberIds),
   ]);
   if (profiles.error) throwFriendly(profiles.error);
   if (permissions.error) throwFriendly(permissions.error);
@@ -912,7 +925,7 @@ export async function listWorkshopEmployees(workshopId: string, client?: Supabas
     ...row,
     profiles: { full_name: profiles.data?.find((profile) => profile.user_id === row.user_id)?.full_name ?? 'Funcionário' },
     workshop_member_permissions: (permissions.data ?? []).filter((permission) => permission.membership_id === row.id).map((permission) => ({
-      module: permission.module, can_view: permission.can_view, can_create: permission.can_create, can_update: permission.can_update, can_delete: permission.can_delete,
+        module: permission.module, can_view: permission.can_view, can_create: permission.can_create, can_update: permission.can_update, can_delete: permission.can_delete, discount_limit_percent: Number(permission.discount_limit_percent ?? 0),
     })),
   })) as WorkshopEmployee[];
 }
@@ -925,9 +938,13 @@ export async function getEmployeeProductivity(workshopId: string, from: string, 
   return (data ?? []) as EmployeeProductivity[];
 }
 
-export async function inviteWorkshopEmployee(workshopId: string, fullName: string, email: string, permissions: Record<string, ModulePermissions>, client?: SupabaseClient): Promise<{ reusedExistingAccount: boolean; invitationSent: boolean }> {
+export async function inviteWorkshopEmployee(workshopId: string, fullName: string, email: string, permissions: Record<string, ModulePermissions>, clientOrOwner?: SupabaseClient | boolean, ownerFlag = false): Promise<{ reusedExistingAccount: boolean; invitationSent: boolean }> {
+  const client = typeof clientOrOwner === 'boolean' ? undefined : clientOrOwner;
+  const isOwner = typeof clientOrOwner === 'boolean' ? clientOrOwner : ownerFlag;
+  const assignedPermissions = { ...permissions };
+  if (!isOwner) { delete assignedPermissions.purchases; delete assignedPermissions.settings; }
   const { data, error } = await clientOrDefault(client).functions.invoke('manage-workshop', {
-    body: { action: 'invite_employee', workshop_id: workshopId, full_name: fullName, email, permissions },
+    body: { action: 'invite_employee', workshop_id: workshopId, full_name: fullName, email, permissions: assignedPermissions },
   });
   if (error) throw new Error(await edgeFunctionErrorMessage(error, 'Não foi possível enviar o convite ao funcionário. Tente novamente.'));
   if (data?.error) throw new Error(data.error);
@@ -937,10 +954,13 @@ export async function inviteWorkshopEmployee(workshopId: string, fullName: strin
   };
 }
 
-export async function saveWorkshopEmployeePermissions(workshopId: string, employee: WorkshopEmployee, permissions: Record<string, ModulePermissions>, client?: SupabaseClient): Promise<void> {
-  const rows = Object.entries(permissions).map(([module, permission]) => ({
+export async function saveWorkshopEmployeePermissions(workshopId: string, employee: WorkshopEmployee, permissions: Record<string, ModulePermissions>, clientOrOwner?: SupabaseClient | boolean, ownerFlag = false): Promise<void> {
+  const client = typeof clientOrOwner === 'boolean' ? undefined : clientOrOwner;
+  const isOwner = typeof clientOrOwner === 'boolean' ? clientOrOwner : ownerFlag;
+  const rows = Object.entries(permissions).filter(([module]) => isOwner || !['purchases', 'settings'].includes(module)).map(([module, permission]) => ({
     workshop_id: workshopId, membership_id: employee.id, module,
     can_view: permission.view, can_create: permission.create, can_update: permission.update, can_delete: permission.delete,
+    discount_limit_percent: module === 'service_order_discount_limited' ? permission.discountLimitPercent ?? 0 : 0,
   }));
   const { error } = await clientOrDefault(client).from('workshop_member_permissions').upsert(rows, { onConflict: 'membership_id,module' });
   if (error) throwFriendly(error);

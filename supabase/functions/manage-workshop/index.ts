@@ -6,7 +6,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
-const modules = ['dashboard', 'clients', 'vehicles', 'service_orders', 'after_sales', 'estimates', 'inventory', 'purchases', 'finance', 'reports', 'employees', 'settings'];
+const modules = ['dashboard', 'clients', 'vehicles', 'service_orders', 'after_sales', 'estimates', 'inventory', 'purchases', 'finance', 'reports', 'employees', 'settings', 'service_order_discount', 'service_order_discount_limited'];
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 const validId = (value: unknown) => typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 
@@ -213,7 +213,24 @@ Deno.serve(async (request) => {
         console.error('Não foi possível verificar o vínculo do proprietário.', ownerError.message);
         return json({ error: 'Não foi possível verificar seu acesso à oficina. Atualize a página e tente novamente.' }, 500);
       }
-      if (membership?.role !== 'owner' || membership.status !== 'active' || membership.workshops?.status !== 'active') return json({ error: 'É necessário ter acesso ativo de proprietário a esta oficina.' }, 403);
+      if (!membership || membership.status !== 'active' || membership.workshops?.status !== 'active') return json({ error: 'É necessário ter acesso ativo a esta oficina.' }, 403);
+      const isOwner = membership.role === 'owner';
+      const { data: actorPermissions, error: actorPermissionsError } = await caller.rpc('get_workshop_permissions', { target_workshop_id: workshopId });
+      if (actorPermissionsError) {
+        console.error('Não foi possível verificar as permissões para convidar funcionário.', actorPermissionsError.message);
+        return json({ error: 'Não foi possível verificar suas permissões. Atualize a página e tente novamente.' }, 500);
+      }
+      const employeeAccess = (actorPermissions ?? []).find((permission: { module: string }) => permission.module === 'employees');
+      if (!isOwner && !(employeeAccess?.can_create === true && employeeAccess?.can_update === true)) {
+        return json({ error: 'Somente o proprietário ou um gestor autorizado pode convidar funcionários.' }, 403);
+      }
+
+      const permissions = body.permissions && typeof body.permissions === 'object' ? body.permissions : {};
+      const discountLimitPercent = Number(permissions.service_order_discount_limited?.discountLimitPercent ?? 0);
+      if (!Number.isFinite(discountLimitPercent) || discountLimitPercent < 0 || discountLimitPercent > 100
+        || (permissions.service_order_discount_limited?.update === true && discountLimitPercent <= 0)) {
+        return json({ error: 'Defina um limite de desconto para Vendas entre 0,01% e 100%.' }, 400);
+      }
 
       const name = String(body.full_name ?? '').trim();
       const email = String(body.email ?? '').trim().toLowerCase();
@@ -269,11 +286,11 @@ Deno.serve(async (request) => {
           ? 'Não foi possível vincular o acesso do funcionário. A conta existente foi preservada; tente novamente.'
           : 'O convite foi enviado, mas não foi possível concluir o acesso do funcionário. A conta foi preservada; tente novamente.' }, 400);
       }
-      const permissions = body.permissions && typeof body.permissions === 'object' ? body.permissions : {};
-      const rows = modules.map((module) => {
+      const rows = modules.filter((module) => isOwner || !['purchases', 'settings'].includes(module)).map((module) => {
         const p = permissions[module] ?? {};
         return { workshop_id: workshopId, membership_id: newMembership.id, module,
-          can_view: p.view === true, can_create: p.create === true, can_update: p.update === true, can_delete: p.delete === true };
+          can_view: p.view === true, can_create: p.create === true, can_update: p.update === true, can_delete: p.delete === true,
+          discount_limit_percent: module === 'service_order_discount_limited' ? discountLimitPercent : 0 };
       });
       const { error: permissionsError } = await caller.from('workshop_member_permissions').insert(rows);
       if (permissionsError) {

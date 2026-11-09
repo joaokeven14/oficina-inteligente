@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import FormField from '../components/FormField';
 import { useWorkshopLiveRefresh } from '../hooks/useWorkshopLiveRefresh';
@@ -52,6 +52,7 @@ export default function ServiceOrderChecklistPage({
   const [statement, setStatement] = useState('');
   const [signatureStrokes, setSignatureStrokes] = useState<SignaturePoint[][]>([]);
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
+  const checklistScroll = useRef<ScrollView | null>(null);
 
   const refresh = useCallback(async () => {
     setError('');
@@ -109,6 +110,11 @@ export default function ServiceOrderChecklistPage({
       setError(reason instanceof Error ? reason.message : 'Não foi possível salvar e assinar o checklist.');
     } finally { setBusy(false); }
   };
+  const handleChecklistAction = () => {
+    if (!items.length) { setError('Nenhum item de checklist foi configurado para esta ordem.'); return; }
+    if (!decision || !signatureStrokes.length) { checklistScroll.current?.scrollToEnd({ animated: true }); return; }
+    saveAndSign().catch(() => undefined);
+  };
 
   return <View style={styles.page}>
     <View style={styles.header}>
@@ -118,7 +124,7 @@ export default function ServiceOrderChecklistPage({
       </View>
       <Pressable accessibilityRole="button" style={styles.backButton} onPress={onBack}><Text style={styles.backText}>Voltar à ordem</Text></Pressable>
     </View>
-    {loading ? <ActivityIndicator style={styles.loading} color="#e97824" /> : <ScrollView style={styles.scroll} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+    {loading ? <ActivityIndicator style={styles.loading} color="#e97824" /> : <View style={styles.checklistArea}><ScrollView ref={checklistScroll} style={styles.scroll} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
       <View style={styles.introCard}>
         <Text style={styles.sectionTitle}>Conferência de entrada</Text>
         <Text style={styles.helper}>Registre o estado observado no momento em que o veículo foi recebido. Itens não avaliados ficam marcados como pendentes.</Text>
@@ -176,7 +182,7 @@ export default function ServiceOrderChecklistPage({
         <Text style={styles.sectionTitle}>Histórico de checklists assinados</Text>
         {!history.length ? <Text style={styles.empty}>Ainda não há checklist assinado nesta OS.</Text> : history.map((record) => <SignatureHistoryCard key={record.id} record={record} />)}
       </View>
-    </ScrollView>}
+    </ScrollView>{canSign ? <View style={styles.stickyFooter}><Text style={styles.stickyHint}>{decision && signatureStrokes.length ? 'Checklist pronto para registrar.' : 'A decisão e a assinatura ficam no final do checklist.'}</Text><Pressable accessibilityRole="button" disabled={!items.length || busy} style={[styles.stickyAction, (!items.length || busy) && styles.disabled]} onPress={handleChecklistAction}><Text style={styles.stickyActionText}>{busy ? 'Salvando…' : decision && signatureStrokes.length ? 'Salvar checklist e assinar' : 'Ir para decisão e assinatura'}</Text></Pressable></View> : null}</View>}
   </View>;
 }
 
@@ -198,7 +204,7 @@ const styles = StyleSheet.create({
   header: { minHeight: 70, paddingHorizontal: 18, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#e1e8ef', backgroundColor: '#fff', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   headerCopy: { flex: 1 }, title: { color: '#10243a', fontSize: 18, fontWeight: '800' }, subtitle: { marginTop: 4, color: '#718197', fontSize: 12 },
   backButton: { paddingHorizontal: 12, paddingVertical: 9, borderWidth: 1, borderColor: '#dce3eb', borderRadius: 8 }, backText: { color: '#33465b', fontSize: 11, fontWeight: '700' },
-  loading: { padding: 30 }, scroll: { flex: 1 }, content: { padding: 16, gap: 11 }, introCard: { padding: 14, borderRadius: 11, backgroundColor: '#fff', borderWidth: 1, borderColor: '#e1e8ef' },
+  loading: { padding: 30 }, checklistArea: { flex: 1, minHeight: 0 }, scroll: { flex: 1 }, content: { padding: 16, paddingBottom: 24, gap: 11 }, stickyFooter: { paddingHorizontal: 14, paddingTop: 8, paddingBottom: 10, borderTopWidth: 1, borderTopColor: '#dce3eb', backgroundColor: '#fff' }, stickyHint: { marginBottom: 6, color: '#718197', fontSize: 10, textAlign: 'center' }, stickyAction: { minHeight: 43, paddingHorizontal: 14, alignItems: 'center', justifyContent: 'center', borderRadius: 9, backgroundColor: '#e97824' }, stickyActionText: { color: '#fff', fontSize: 11, fontWeight: '800' }, introCard: { padding: 14, borderRadius: 11, backgroundColor: '#fff', borderWidth: 1, borderColor: '#e1e8ef' },
   sectionTitle: { color: '#10243a', fontSize: 16, fontWeight: '800' }, helper: { marginTop: 5, color: '#718197', fontSize: 11, lineHeight: 17 }, progress: { marginTop: 9, color: '#52657a', fontSize: 11, fontWeight: '800' },
   itemCard: { padding: 13, borderRadius: 10, backgroundColor: '#fff', borderWidth: 1, borderColor: '#e1e8ef' }, itemTitle: { color: '#26394e', fontSize: 13, fontWeight: '800' },
   conditions: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 }, condition: { paddingHorizontal: 9, paddingVertical: 8, borderWidth: 1, borderColor: '#dce3eb', borderRadius: 8 }, conditionActive: { backgroundColor: '#10243a', borderColor: '#10243a' }, conditionText: { color: '#53657b', fontSize: 10 }, conditionTextActive: { color: '#fff', fontWeight: '700' },

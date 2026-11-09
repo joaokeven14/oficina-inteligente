@@ -47,6 +47,8 @@ export default function ServiceOrdersScreen({ workshopId }: { workshopId: string
   const [canCreate, setCanCreate] = useState(false);
   const [canUpdate, setCanUpdate] = useState(false);
   const [canDelete, setCanDelete] = useState(false);
+  const [canDiscountWithoutLimit, setCanDiscountWithoutLimit] = useState(false);
+  const [discountLimitPercent, setDiscountLimitPercent] = useState(0);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -79,7 +81,7 @@ export default function ServiceOrdersScreen({ workshopId }: { workshopId: string
       const [orderRows, customerRows, vehicleRows, access] = await Promise.all([
         listServiceOrders(workshopId), listCustomers(workshopId), listVehicles(workshopId), getWorkshopPermissions(workshopId),
       ]);
-      const stockRows = access.service_orders.create ? await listServiceOrderStockProducts(workshopId) : [];
+      const stockRows = access.service_orders.create || access.service_orders.update ? await listServiceOrderStockProducts(workshopId) : [];
       const employeeRows = access.employees.view ? await listWorkshopEmployees(workshopId) : [];
       setOrders(orderRows);
       setCustomers(customerRows);
@@ -89,6 +91,8 @@ export default function ServiceOrdersScreen({ workshopId }: { workshopId: string
       setCanCreate(access.service_orders.create);
       setCanUpdate(access.service_orders.update);
       setCanDelete(access.service_orders.delete);
+      setCanDiscountWithoutLimit(access.service_order_discount?.update === true);
+      setDiscountLimitPercent(access.service_order_discount_limited?.update ? access.service_order_discount_limited.discountLimitPercent ?? 0 : 0);
       setSelectedOrder((current) => current ? orderRows.find((order) => order.id === current.id) ?? current : null);
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Não foi possível carregar as ordens de serviço.'); }
     finally { setLoading(false); }
@@ -224,10 +228,14 @@ export default function ServiceOrdersScreen({ workshopId }: { workshopId: string
   };
 
   const saveDiscount = async () => {
-    if (!selectedOrder || !canUpdate) return;
+    if (!selectedOrder || (!canDiscountWithoutLimit && discountLimitPercent <= 0)) return;
     const parsed = Number(discountValue.replace(',', '.'));
-    if (!Number.isFinite(parsed) || parsed < 0 || parsed > Number(selectedOrder.items_subtotal)) {
-      setError('Informe um desconto entre zero e o subtotal da ordem.');
+    const subtotal = Number(selectedOrder.items_subtotal);
+    const maximumDiscount = canDiscountWithoutLimit ? subtotal : Math.round(subtotal * discountLimitPercent) / 100;
+    if (!Number.isFinite(parsed) || parsed < 0 || parsed > maximumDiscount) {
+      setError(canDiscountWithoutLimit
+        ? 'Informe um desconto entre zero e o subtotal da ordem.'
+        : `O limite definido pelo gestor é ${discountLimitPercent}% do subtotal (${money(maximumDiscount)}).`);
       return;
     }
     setBusy(true); setError('');
@@ -308,7 +316,7 @@ export default function ServiceOrdersScreen({ workshopId }: { workshopId: string
   };
 
   const addItem = async () => {
-    if (!selectedOrder) return;
+    if (!selectedOrder || (!canCreate && !canUpdate) || !selectedOrderIsEditable) return;
     if (itemType === 'part' && !selectedProductId) { setError('Pesquise e selecione uma peça com saldo no estoque.'); return; }
     setBusy(true); setError('');
     try {
@@ -333,7 +341,7 @@ export default function ServiceOrdersScreen({ workshopId }: { workshopId: string
       await changeStatus('completed');
       return;
     }
-    if (!canDelete || !selectedOrderIsEditable) return;
+    if ((!canDelete && !canUpdate) || !selectedOrderIsEditable) return;
     setBusy(true); setError('');
     try {
       await archiveServiceOrderItem(workshopId, action.item.id);
@@ -450,12 +458,12 @@ export default function ServiceOrdersScreen({ workshopId }: { workshopId: string
               <View key={item.id} style={styles.itemRow}>
                 <View style={styles.itemMain}><Text style={styles.itemName}>{item.description}</Text><Text style={styles.meta}>{item.item_type === 'labor' ? 'Mão de obra' : 'Peça'} · {item.quantity} × {money(item.unit_price)}</Text></View>
                 <Text style={styles.amount}>{money(item.line_total)}</Text>
-                {canDelete && selectedOrderIsEditable ? <Pressable accessibilityRole="button" accessibilityLabel={`Excluir ${item.description} da OS`} disabled={busy} style={[styles.removeButton, busy && styles.disabled]} onPress={() => removeItem(item)}><Text style={styles.removeText}>Excluir</Text></Pressable> : null}
+                {(canDelete || canUpdate) && selectedOrderIsEditable ? <Pressable accessibilityRole="button" accessibilityLabel={`Excluir ${item.description} da OS`} disabled={busy} style={[styles.removeButton, busy && styles.disabled]} onPress={() => removeItem(item)}><Text style={styles.removeText}>Excluir</Text></Pressable> : null}
               </View>
             ))}
             {!items.length ? <Text style={styles.noData}>Nenhum serviço ou peça foi lançado nesta ordem.</Text> : null}
 
-            {canCreate && selectedOrderIsEditable ? (
+            {(canCreate || canUpdate) && selectedOrderIsEditable ? (
               <View style={styles.addItemCard}>
                 <Text style={styles.label}>Adicionar item</Text>
                 <View style={styles.typeChoices}>{(['labor', 'part'] as const).map((type) => { const active = itemType === type; return <Pressable key={type} style={[styles.typeChoice, active && styles.typeChoiceActive]} onPress={() => { setItemType(type); setSelectedProductId(''); setInventorySearch(''); setItemDescription(''); setItemPrice(''); }}><Text style={[styles.typeChoiceText, active && styles.typeChoiceTextActive]}>{type === 'labor' ? 'Mão de obra' : 'Peça'}</Text></Pressable>; })}</View>
@@ -488,8 +496,7 @@ export default function ServiceOrdersScreen({ workshopId }: { workshopId: string
 
             <View style={styles.totalCard}>
               <View style={styles.totalLine}><Text style={styles.meta}>Subtotal</Text><Text style={styles.totalSmall}>{money(selectedOrder?.items_subtotal ?? 0)}</Text></View>
-              {canUpdate ? <><FormField label="Desconto (R$)" value={discountValue} onChangeText={setDiscountValue} keyboardType="decimal-pad" placeholder="0,00" /><Pressable accessibilityRole="button" disabled={busy} style={[styles.secondaryButton, busy && styles.disabled]} onPress={() => { saveDiscount(); }}><Text style={styles.secondaryButtonText}>Salvar desconto</Text></Pressable></> : <View style={styles.totalLine}><Text style={styles.meta}>Desconto</Text><Text style={styles.totalSmall}>{money(selectedOrder?.discount ?? 0)}</Text></View>}
-              {canUpdate ? <View style={styles.totalLine}><Text style={styles.meta}>Desconto atual</Text><Text style={styles.totalSmall}>{money(selectedOrder?.discount ?? 0)}</Text></View> : null}
+              {canDiscountWithoutLimit || discountLimitPercent > 0 ? <><Text style={styles.meta}>{canDiscountWithoutLimit ? 'Gestor/Administração: desconto sem limite adicional' : `Limite de Vendas definido pelo gestor: ${discountLimitPercent}% do subtotal`}</Text><FormField label="Desconto (R$)" value={discountValue} onChangeText={setDiscountValue} keyboardType="decimal-pad" placeholder="0,00" /><Pressable accessibilityRole="button" disabled={busy} style={[styles.secondaryButton, busy && styles.disabled]} onPress={() => { saveDiscount(); }}><Text style={styles.secondaryButtonText}>Salvar desconto</Text></Pressable></> : <View style={styles.totalLine}><Text style={styles.meta}>Desconto</Text><Text style={styles.totalSmall}>{money(selectedOrder?.discount ?? 0)}</Text></View>}
               <View style={styles.totalLine}><Text style={styles.totalLabel}>Total da OS</Text><Text style={styles.totalValue}>{money(selectedOrder?.total_amount ?? 0)}</Text></View>
               <Text style={styles.totalNote}>Totais são calculados pelo banco. Peças vinculadas a produto têm baixa automática e estorno ao remover ou cancelar a OS.</Text>
             </View>

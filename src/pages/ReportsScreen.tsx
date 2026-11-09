@@ -38,7 +38,7 @@ export default function ReportsScreen({ workshopId, workshopName, isOwner }: { w
         permissions.service_orders.view ? listServiceOrders(workshopId) : Promise.resolve([]),
         permissions.estimates.view ? listEstimates(workshopId) : Promise.resolve([]),
         permissions.inventory.view ? listInventoryProducts(workshopId) : Promise.resolve([]),
-        permissions.inventory.view ? listPurchases(workshopId) : Promise.resolve([]),
+        permissions.purchases?.view ? listPurchases(workshopId) : Promise.resolve([]),
         permissions.finance.view ? listFinancialEntries(workshopId) : Promise.resolve([]),
         permissions.finance.view ? listPayables(workshopId) : Promise.resolve([]),
         permissions.after_sales?.view ? listMaintenanceReminders(workshopId) : Promise.resolve([]),
@@ -46,7 +46,7 @@ export default function ReportsScreen({ workshopId, workshopName, isOwner }: { w
         permissions.employees.view ? listWorkshopEmployees(workshopId) : Promise.resolve([]),
       ]);
       setData({ customers, vehicles, orders, estimates, stock, purchases, entries, payables, reminders, warranties, employees });
-      setCanLoadProductivity(isOwner && permissions.reports.view && permissions.employees.view);
+      setCanLoadProductivity(permissions.reports.view && permissions.employees.view);
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Não foi possível montar os relatórios.'); }
     finally { setLoading(false); }
   }, [workshopId, isOwner]);
