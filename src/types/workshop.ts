@@ -89,6 +89,20 @@ export type ServiceOrderInspectionItem = { id: string; workshop_id: string; serv
 export type ServiceOrderTechnicalNote = { id: string; workshop_id: string; service_order_id: string; category: string; body: string; is_recommendation: boolean; created_at: string };
 export type SignaturePoint = { x: number; y: number };
 export type ServiceOrderAuthorization = { id: string; workshop_id: string; service_order_id: string; customer_id: string; authorization_type: 'estimate' | 'service' | 'delivery'; signer_name: string; statement: string; amount: number | string; signature_strokes: SignaturePoint[][]; signed_by: string; signed_at: string };
+export type ServiceOrderChecklistDecision = 'authorized' | 'not_authorized';
+export type ServiceOrderChecklistSignature = {
+  id: string;
+  workshop_id: string;
+  service_order_id: string;
+  customer_id: string;
+  customer_decision: ServiceOrderChecklistDecision;
+  signer_name: string;
+  statement: string;
+  checklist_snapshot: Array<Pick<ServiceOrderInspectionItem, 'item_key' | 'item_label' | 'condition' | 'observations' | 'recommendation'>>;
+  signature_strokes: SignaturePoint[][];
+  signed_by: string;
+  signed_at: string;
+};
 export type ServiceOrderAttachment = { id: string; workshop_id: string; service_order_id: string; storage_path: string; file_name: string; mime_type: string; size_bytes: number; caption: string; uploaded_by: string; created_at: string; signed_url: string };
 
 export type InventoryProduct = {
@@ -107,6 +121,7 @@ export type InventoryProduct = {
   created_at: string;
   updated_at: string;
 };
+export type ServiceOrderStockProduct = Pick<InventoryProduct, 'id' | 'workshop_id' | 'name' | 'code' | 'category' | 'brand' | 'quantity' | 'sale_price'>;
 
 export type InventoryProductInput = Pick<InventoryProduct, 'name' | 'code' | 'category' | 'brand' | 'minimum_quantity' | 'cost_price' | 'sale_price' | 'location' | 'notes'>;
 export type InventoryMovement = {

@@ -3,6 +3,7 @@ import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, View
 import FormField from '../components/FormField';
 import { useWorkshopLiveRefresh } from '../hooks/useWorkshopLiveRefresh';
 import ServiceOrderInspectionPanel from './ServiceOrderInspectionPanel';
+import ServiceOrderChecklistPage from './ServiceOrderChecklistPage';
 import ServiceOrderAuthorizationPanel from './ServiceOrderAuthorizationPanel';
 import ServiceOrderAttachmentsPanel from './ServiceOrderAttachmentsPanel';
 import { openPrintableDocument } from '../utils/printDocument';
@@ -13,12 +14,13 @@ import {
   getWorkshopPermissions,
   getWorkshopSettings,
   getMyActiveServiceOrderTimer,
-  listInventoryProducts,
+  listServiceOrderStockProducts,
   listCustomers,
   listServiceOrderItems,
   listServiceOrderInspection,
   listServiceOrderTechnicalNotes,
   listServiceOrderAuthorizations,
+  listServiceOrderChecklistSignatures,
   listServiceOrders,
   listVehicles,
   listWorkshopEmployees,
@@ -27,7 +29,7 @@ import {
   stopServiceOrderTimer,
   updateServiceOrder,
 } from '../services/workshopData';
-import type { Customer, InventoryProduct, ServiceOrder, ServiceOrderItem, ServiceOrderStatus, ServiceOrderTimeEntry, Vehicle, WorkshopEmployee } from '../types/workshop';
+import type { Customer, ServiceOrder, ServiceOrderItem, ServiceOrderStatus, ServiceOrderStockProduct, ServiceOrderTimeEntry, Vehicle, WorkshopEmployee } from '../types/workshop';
 
 const money = (value: number | string) => `R$ ${Number(value).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const openedDate = (value: string) => new Date(value).toLocaleDateString('pt-BR');
@@ -40,10 +42,8 @@ export default function ServiceOrdersScreen({ workshopId }: { workshopId: string
   const [orders, setOrders] = useState<ServiceOrder[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
-  const [inventoryProducts, setInventoryProducts] = useState<InventoryProduct[]>([]);
+  const [inventoryProducts, setInventoryProducts] = useState<ServiceOrderStockProduct[]>([]);
   const [employees, setEmployees] = useState<WorkshopEmployee[]>([]);
-  const [canViewInventory, setCanViewInventory] = useState(false);
-  const [canUseInventory, setCanUseInventory] = useState(false);
   const [canCreate, setCanCreate] = useState(false);
   const [canUpdate, setCanUpdate] = useState(false);
   const [canDelete, setCanDelete] = useState(false);
@@ -53,6 +53,7 @@ export default function ServiceOrdersScreen({ workshopId }: { workshopId: string
   const [query, setQuery] = useState('');
   const [creating, setCreating] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<ServiceOrder | null>(null);
+  const [checklistOpen, setChecklistOpen] = useState(false);
   const [pendingOrderAction, setPendingOrderAction] = useState<PendingOrderAction | null>(null);
   const [items, setItems] = useState<ServiceOrderItem[]>([]);
   const [activeTimer, setActiveTimer] = useState<ServiceOrderTimeEntry | null>(null);
@@ -78,15 +79,13 @@ export default function ServiceOrdersScreen({ workshopId }: { workshopId: string
       const [orderRows, customerRows, vehicleRows, access] = await Promise.all([
         listServiceOrders(workshopId), listCustomers(workshopId), listVehicles(workshopId), getWorkshopPermissions(workshopId),
       ]);
-      const stockRows = access.inventory.view ? await listInventoryProducts(workshopId) : [];
+      const stockRows = access.service_orders.create ? await listServiceOrderStockProducts(workshopId) : [];
       const employeeRows = access.employees.view ? await listWorkshopEmployees(workshopId) : [];
       setOrders(orderRows);
       setCustomers(customerRows);
       setVehicles(vehicleRows);
       setInventoryProducts(stockRows);
       setEmployees(employeeRows.filter((employee) => employee.status === 'active'));
-      setCanViewInventory(access.inventory.view);
-      setCanUseInventory(access.inventory.create);
       setCanCreate(access.service_orders.create);
       setCanUpdate(access.service_orders.update);
       setCanDelete(access.service_orders.delete);
@@ -96,7 +95,7 @@ export default function ServiceOrdersScreen({ workshopId }: { workshopId: string
   }, [workshopId]);
 
   useEffect(() => { refresh(); }, [refresh]);
-  useWorkshopLiveRefresh(workshopId, ['customers', 'vehicles', 'service_orders', 'service_order_items', 'inventory_products'], refresh);
+  useWorkshopLiveRefresh(workshopId, ['customers', 'vehicles', 'service_orders', 'service_order_items', 'service_order_stock_products'], refresh);
 
   const refreshActiveTimer = useCallback(async () => {
     if (!selectedOrder) return;
@@ -165,12 +164,13 @@ export default function ServiceOrdersScreen({ workshopId }: { workshopId: string
     });
   }, [customers, vehicleCustomerSearch, vehicles]);
   const displayedOrderVehicles = matchingOrderVehicles.slice(0, 40);
+  const selectedStockProduct = inventoryProducts.find((product) => product.id === selectedProductId) ?? null;
   const availableInventoryProducts = useMemo(() => inventoryProducts.filter((product) => Number(product.quantity) > 0), [inventoryProducts]);
   const matchingInventoryProducts = useMemo(() => {
     const query = searchKey(inventorySearch);
     const compactQuery = compactSearchKey(inventorySearch);
     if (!query) return availableInventoryProducts;
-    return availableInventoryProducts.filter((product) => [product.name, product.code ?? '', product.brand ?? '', product.category ?? '', product.location ?? '']
+    return availableInventoryProducts.filter((product) => [product.name, product.code ?? '', product.brand ?? '', product.category ?? '']
       .some((value) => searchKey(value).includes(query) || (compactQuery && compactSearchKey(value).includes(compactQuery))));
   }, [availableInventoryProducts, inventorySearch]);
   const displayedInventoryProducts = matchingInventoryProducts.slice(0, 40);
@@ -248,9 +248,10 @@ export default function ServiceOrdersScreen({ workshopId }: { workshopId: string
     if (!selectedOrder) return;
     setBusy(true); setError('');
     try {
-      const [settings, inspection, technicalNotes, authorizations] = await Promise.all([
+      const [settings, inspection, technicalNotes, authorizations, checklistSignatures] = await Promise.all([
         getWorkshopSettings(workshopId), listServiceOrderInspection(workshopId, selectedOrder.id),
         listServiceOrderTechnicalNotes(workshopId, selectedOrder.id), listServiceOrderAuthorizations(workshopId, selectedOrder.id),
+        listServiceOrderChecklistSignatures(workshopId, selectedOrder.id),
       ]);
       const conditions = { good: 'Bom', attention: 'Atenção', critical: 'Crítico', not_inspected: 'Não inspecionado' };
       const rows = [
@@ -268,6 +269,10 @@ export default function ServiceOrdersScreen({ workshopId }: { workshopId: string
         ...inspection.map((item) => ({ label: `${item.item_kind === 'checklist' ? 'Checklist' : 'Inspeção'} · ${item.item_label} (${conditions[item.condition]})`, value: [item.observations, item.recommendation ? `Recomendação: ${item.recommendation}` : ''].filter(Boolean).join(' · ') || 'Sem observações' })),
         ...technicalNotes.map((note) => ({ label: `Nota técnica · ${note.category}${note.is_recommendation ? ' · preventiva' : ' · diagnóstico'}`, value: note.body })),
         ...authorizations.map((authorization) => ({ label: `Autorização ${authorization.authorization_type} · ${authorization.signer_name} · ${new Date(authorization.signed_at).toLocaleString('pt-BR')}`, value: `${authorization.statement} · ${money(authorization.amount)}` })),
+        ...checklistSignatures.map((signature) => ({
+          label: `Checklist assinado · ${signature.customer_decision === 'authorized' ? 'Cliente autorizou' : 'Cliente não autorizou'} · ${signature.signer_name} · ${new Date(signature.signed_at).toLocaleString('pt-BR')}`,
+          value: `${signature.statement} · ${signature.checklist_snapshot.map((item) => `${item.item_label}: ${conditions[item.condition]}`).join('; ')}`,
+        })),
       ];
       const workshopDetails = [settings.name, settings.cnpj ? `CNPJ ${settings.cnpj}` : '', settings.phone ?? '', settings.address ?? '', [settings.city, settings.state].filter(Boolean).join(' / ')].filter(Boolean).join(' · ');
       await openPrintableDocument(`Ordem de serviço #${selectedOrder.order_number}`, workshopDetails, rows, undefined, settings.logo_url);
@@ -304,6 +309,7 @@ export default function ServiceOrdersScreen({ workshopId }: { workshopId: string
 
   const addItem = async () => {
     if (!selectedOrder) return;
+    if (itemType === 'part' && !selectedProductId) { setError('Pesquise e selecione uma peça com saldo no estoque.'); return; }
     setBusy(true); setError('');
     try {
       await createServiceOrderItem(workshopId, selectedOrder.id, {
@@ -338,7 +344,7 @@ export default function ServiceOrdersScreen({ workshopId }: { workshopId: string
   };
 
   const closeCreate = () => { if (!busy) setCreating(false); };
-  const closeOrder = () => { if (!busy) setSelectedOrder(null); };
+  const closeOrder = () => { if (!busy) { setChecklistOpen(false); setSelectedOrder(null); } };
 
   return (
     <View style={styles.container}>
@@ -409,9 +415,20 @@ export default function ServiceOrdersScreen({ workshopId }: { workshopId: string
 
       <Modal visible={!!selectedOrder} animationType="slide" onRequestClose={closeOrder}>
         <View style={styles.modal}>
+          {checklistOpen && selectedOrder ? <ServiceOrderChecklistPage
+            key={`checklist-${selectedOrder.id}`}
+            workshopId={workshopId}
+            orderId={selectedOrder.id}
+            customerId={selectedOrder.customer_id}
+            customerName={selectedOrder.customers?.full_name ?? ''}
+            orderNumber={selectedOrder.order_number}
+            canSign={canUpdate && selectedOrder.status !== 'canceled'}
+            onBack={() => setChecklistOpen(false)}
+          /> : <>
           <View style={styles.modalHeader}><View><Text style={styles.title}>OS #{selectedOrder?.order_number}</Text><Text style={styles.subtitle}>{selectedOrder?.customers?.full_name} · {selectedOrder?.vehicles?.plate}</Text></View><Pressable onPress={closeOrder}><Text style={styles.cancelText}>Fechar</Text></Pressable></View>
           {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
           <ScrollView contentContainerStyle={styles.formContent} keyboardShouldPersistTaps="handled">
+            <Pressable accessibilityRole="button" style={styles.checklistButton} onPress={() => { setError(''); setChecklistOpen(true); }}><Text style={styles.checklistButtonText}>Abrir checklist de entrada</Text><Text style={styles.checklistButtonHint}>Inspecionar o veículo, registrar a decisão e coletar assinatura</Text></Pressable>
             <Pressable accessibilityRole="button" disabled={busy} style={[styles.primaryButton, busy && styles.disabled]} onPress={() => { printOrder().catch(() => undefined); }}><Text style={styles.primaryButtonText}>Imprimir / compartilhar OS, checklist e laudo</Text></Pressable>
             <Pressable accessibilityRole="button" disabled={busy} style={[styles.secondaryButton, busy && styles.disabled]} onPress={() => { printDeliveryReceipt().catch(() => undefined); }}><Text style={styles.secondaryButtonText}>Comprovante de entrega</Text></Pressable>
             {canUpdate && selectedOrder && !['completed','delivered','canceled'].includes(selectedOrder.status) ? <View style={styles.timerCard}><View style={styles.timerCopy}><Text style={styles.label}>Tempo de execução</Text><Text style={styles.meta}>{activeTimer ? `Em andamento desde ${new Date(activeTimer.started_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` : 'Registre o tempo efetivamente dedicado a esta ordem.'}</Text></View><Pressable accessibilityRole="button" disabled={busy} style={[styles.timerButton, activeTimer && styles.timerStop]} onPress={() => { toggleTimer().catch(() => undefined); }}><Text style={styles.timerButtonText}>{busy ? 'Aguarde…' : activeTimer ? 'Encerrar' : 'Iniciar'}</Text></Pressable></View> : null}
@@ -442,23 +459,28 @@ export default function ServiceOrdersScreen({ workshopId }: { workshopId: string
               <View style={styles.addItemCard}>
                 <Text style={styles.label}>Adicionar item</Text>
                 <View style={styles.typeChoices}>{(['labor', 'part'] as const).map((type) => { const active = itemType === type; return <Pressable key={type} style={[styles.typeChoice, active && styles.typeChoiceActive]} onPress={() => { setItemType(type); setSelectedProductId(''); setInventorySearch(''); setItemDescription(''); setItemPrice(''); }}><Text style={[styles.typeChoiceText, active && styles.typeChoiceTextActive]}>{type === 'labor' ? 'Mão de obra' : 'Peça'}</Text></Pressable>; })}</View>
-                {itemType === 'part' && canViewInventory ? <>
-                  <Text style={styles.meta}>{canUseInventory ? 'Pesquise uma peça com saldo. Ao adicioná-la à OS, o estoque será baixado automaticamente.' : 'Pesquise peças disponíveis. Sua conta pode consultar o estoque, mas não pode fazer a baixa automática.'}</Text>
-                  <FormField label="Pesquisar peça em estoque" value={inventorySearch} onChangeText={setInventorySearch} placeholder="Nome, código, marca ou categoria" />
-                  {displayedInventoryProducts.length ? <View style={styles.inventorySearchResults}>
-                    {displayedInventoryProducts.map((product) => <Pressable key={product.id} accessibilityRole="button" style={[styles.inventoryProductChoice, selectedProductId === product.id && styles.inventoryProductChoiceActive]} onPress={() => {
-                      setSelectedProductId(canUseInventory ? product.id : '');
-                      setItemDescription(product.name);
-                      setItemPrice(String(product.sale_price));
-                      setInventorySearch('');
-                    }}>
-                      <Text style={styles.inventoryProductName}>{product.name}{product.code ? ` · ${product.code}` : ''}</Text>
-                      <Text style={styles.inventoryProductMeta}>{product.brand ? `${product.brand} · ` : ''}{product.category ? `${product.category} · ` : ''}{Number(product.quantity).toLocaleString('pt-BR')} disponível(is) · {money(product.sale_price)}</Text>
-                    </Pressable>)}
-                    {matchingInventoryProducts.length > displayedInventoryProducts.length ? <Text style={styles.noData}>Mostrando 40 peças. Digite mais dados para refinar a busca.</Text> : null}
-                  </View> : <Text style={styles.noData}>{availableInventoryProducts.length ? 'Nenhuma peça em estoque encontrada.' : 'Não há peças com saldo disponível no estoque.'}</Text>}
-                </> : itemType === 'part' ? <Text style={styles.noData}>A consulta ao estoque não está liberada para sua conta. Peça ao proprietário para liberar o acesso.</Text> : null}
-                <FormField label={itemType === 'labor' ? 'Descrição da mão de obra' : 'Descrição da peça'} value={itemDescription} onChangeText={(value) => { setItemDescription(value); if (selectedProductId) setSelectedProductId(''); }} placeholder={itemType === 'labor' ? 'Descreva o serviço realizado' : 'Descreva a peça utilizada'} />
+                {itemType === 'part' ? <>
+                  <Text style={styles.meta}>Pesquise uma peça com saldo no estoque. Ao adicioná-la à OS, a baixa será registrada no histórico da própria ordem.</Text>
+                  {selectedStockProduct ? <View style={styles.selectedPartCard}>
+                    <View style={styles.selectedPartInfo}><Text style={styles.inventoryProductName}>{selectedStockProduct.name}{selectedStockProduct.code ? ` · ${selectedStockProduct.code}` : ''}</Text><Text style={styles.inventoryProductMeta}>{selectedStockProduct.brand ? `${selectedStockProduct.brand} · ` : ''}{selectedStockProduct.category ? `${selectedStockProduct.category} · ` : ''}{Number(selectedStockProduct.quantity).toLocaleString('pt-BR')} disponível(is) · {money(selectedStockProduct.sale_price)}</Text></View>
+                    <Pressable accessibilityRole="button" style={styles.changePartButton} onPress={() => { setSelectedProductId(''); setItemDescription(''); setItemPrice(''); }}><Text style={styles.changePartText}>Trocar peça</Text></Pressable>
+                  </View> : <>
+                    <FormField label="Pesquisar peça em estoque" value={inventorySearch} onChangeText={setInventorySearch} placeholder="Nome, código, marca ou categoria" />
+                    {displayedInventoryProducts.length ? <View style={styles.inventorySearchResults}>
+                      {displayedInventoryProducts.map((product) => <Pressable key={product.id} accessibilityRole="button" style={styles.inventoryProductChoice} onPress={() => {
+                        setSelectedProductId(product.id);
+                        setItemDescription(product.name);
+                        setItemPrice(String(product.sale_price));
+                        setInventorySearch('');
+                      }}>
+                        <Text style={styles.inventoryProductName}>{product.name}{product.code ? ` · ${product.code}` : ''}</Text>
+                        <Text style={styles.inventoryProductMeta}>{product.brand ? `${product.brand} · ` : ''}{product.category ? `${product.category} · ` : ''}{Number(product.quantity).toLocaleString('pt-BR')} disponível(is) · {money(product.sale_price)}</Text>
+                      </Pressable>)}
+                      {matchingInventoryProducts.length > displayedInventoryProducts.length ? <Text style={styles.noData}>Mostrando 40 peças. Digite mais dados para refinar a busca.</Text> : null}
+                    </View> : <Text style={styles.noData}>{availableInventoryProducts.length ? 'Nenhuma peça em estoque encontrada.' : 'Não há peças com saldo disponível no estoque.'}</Text>}
+                  </>}
+                </> : null}
+                <FormField label={itemType === 'labor' ? 'Descrição da mão de obra' : 'Peça selecionada'} value={itemDescription} onChangeText={(value) => { setItemDescription(value); if (selectedProductId) setSelectedProductId(''); }} editable={itemType === 'labor'} placeholder={itemType === 'labor' ? 'Descreva o serviço realizado' : 'Pesquise e selecione uma peça em estoque'} />
                 <View style={styles.twoColumns}><View style={styles.column}><FormField label="Quantidade" value={itemQuantity} onChangeText={setItemQuantity} keyboardType="decimal-pad" /></View><View style={styles.column}><FormField label="Valor unitário (R$)" value={itemPrice} onChangeText={setItemPrice} keyboardType="decimal-pad" placeholder="0,00" /></View></View>
                 <Pressable accessibilityRole="button" disabled={busy} style={[styles.secondaryButton, busy && styles.disabled]} onPress={() => { addItem(); }}><Text style={styles.secondaryButtonText}>{busy ? 'Salvando…' : 'Adicionar à ordem'}</Text></Pressable>
               </View>
@@ -473,6 +495,7 @@ export default function ServiceOrdersScreen({ workshopId }: { workshopId: string
             </View>
             {canUpdate && selectedOrderIsEditable ? <Pressable accessibilityRole="button" disabled={busy} style={[styles.finishButton, busy && styles.disabled]} onPress={confirmFinalizeOrder}><Text style={styles.finishButtonText}>{busy ? 'Aguarde…' : 'Finalizar OS'}</Text></Pressable> : null}
           </ScrollView>
+          </>}
         </View>
       </Modal>
       <Modal transparent visible={!!pendingOrderAction} animationType="fade" onRequestClose={() => { if (!busy) setPendingOrderAction(null); }}>
@@ -536,6 +559,9 @@ const styles = StyleSheet.create({
   modal: { flex: 1, paddingTop: 24, paddingHorizontal: 20, backgroundColor: '#f4f7fb' },
   modalHeader: { minHeight: 56, flexDirection: 'row', alignItems: 'center' },
   cancelText: { padding: 8, color: '#315a80', fontSize: 12, fontWeight: '700' },
+  checklistButton: { marginTop: 8, padding: 13, borderWidth: 1, borderColor: '#f0c6a7', borderRadius: 10, backgroundColor: '#fff5ed' },
+  checklistButtonText: { color: '#8d4c19', fontSize: 13, fontWeight: '800' },
+  checklistButtonHint: { marginTop: 4, color: '#9b6a43', fontSize: 10, lineHeight: 15 },
   formContent: { paddingBottom: 34 },
   label: { marginTop: 14, marginBottom: 6, color: '#33465b', fontSize: 12, fontWeight: '700' },
   selectedVehicleCard: { minHeight: 64, paddingHorizontal: 12, paddingVertical: 10, flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: 1, borderColor: '#d8e5db', borderRadius: 9, backgroundColor: '#f5fbf5' },
@@ -573,6 +599,10 @@ const styles = StyleSheet.create({
   inventoryProductChoiceActive: { borderColor: '#e97824', backgroundColor: '#fff5ed' },
   inventoryProductName: { color: '#33465b', fontSize: 12, fontWeight: '700' },
   inventoryProductMeta: { marginTop: 4, color: '#718197', fontSize: 11 },
+  selectedPartCard: { marginTop: 8, padding: 11, flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderColor: '#f0c6a7', borderRadius: 8, backgroundColor: '#fffaf6' },
+  selectedPartInfo: { flex: 1 },
+  changePartButton: { paddingHorizontal: 9, paddingVertical: 7, borderWidth: 1, borderColor: '#f0c6a7', borderRadius: 7 },
+  changePartText: { color: '#8d4c19', fontSize: 10, fontWeight: '800' },
   removeButton: { marginLeft: 8, minHeight: 30, paddingHorizontal: 9, alignItems: 'center', justifyContent: 'center', borderRadius: 8, backgroundColor: '#fbeceb' },
   removeText: { color: '#9d4b3c', fontSize: 10, fontWeight: '800' },
   addItemCard: { marginTop: 17, padding: 14, borderWidth: 1, borderColor: '#e1e8ef', borderRadius: 12, backgroundColor: '#fff' },

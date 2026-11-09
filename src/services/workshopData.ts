@@ -1,12 +1,14 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { getSupabaseClient } from './supabase';
-import type { Customer, CustomerInput, DashboardMetrics, EmployeeProductivity, Estimate, EstimateItem, EstimateItemInput, FinanceDashboardMetrics, FinancialEntry, FinancialEntryInput, FinancialEntryReversal, InventoryMovement, InventoryProduct, InventoryProductInput, MaintenanceReminder, ModulePermissions, Payable, PayablePaymentReversal, PlatformMetrics, PlatformWorkshop, Purchase, ServiceOrder, ServiceOrderAttachment, ServiceOrderAuthorization, ServiceOrderInput, ServiceOrderInspectionItem, ServiceOrderItem, ServiceOrderItemInput, ServiceOrderStatus, ServiceOrderTechnicalNote, ServiceOrderTimeEntry, ServiceWarranty, SignaturePoint, Supplier, Vehicle, VehicleInput, WorkshopContext, WorkshopEmployee, WorkshopPermissions, WorkshopSettings, WorkshopSettingsInput } from '../types/workshop';
+import type { Customer, CustomerInput, DashboardMetrics, EmployeeProductivity, Estimate, EstimateItem, EstimateItemInput, FinanceDashboardMetrics, FinancialEntry, FinancialEntryInput, FinancialEntryReversal, InventoryMovement, InventoryProduct, InventoryProductInput, MaintenanceReminder, ModulePermissions, Payable, PayablePaymentReversal, PlatformMetrics, PlatformWorkshop, Purchase, ServiceOrder, ServiceOrderAttachment, ServiceOrderAuthorization, ServiceOrderChecklistDecision, ServiceOrderChecklistSignature, ServiceOrderInput, ServiceOrderInspectionItem, ServiceOrderItem, ServiceOrderItemInput, ServiceOrderStatus, ServiceOrderStockProduct, ServiceOrderTechnicalNote, ServiceOrderTimeEntry, ServiceWarranty, SignaturePoint, Supplier, Vehicle, VehicleInput, WorkshopContext, WorkshopEmployee, WorkshopPermissions, WorkshopSettings, WorkshopSettingsInput } from '../types/workshop';
 import type { PaymentMethod } from '../utils/paymentMethods';
 
 const messageByCode: Record<string, string> = {
   '23505': 'Já existe um cadastro com esse documento ou placa nesta oficina.',
   '23503': 'Este registro está vinculado a outros dados e não pode ser removido.',
   '42501': 'Seu usuário não tem permissão para essa operação.',
+  '23514': 'A quantidade supera o saldo disponível. Pesquise a peça novamente e confira a quantidade.',
+  '55000': 'Esta ordem está cancelada ou não aceita essa alteração.',
   'PGRST116': 'O registro não foi encontrado ou você não tem acesso a ele.',
 };
 
@@ -20,8 +22,8 @@ function clientOrDefault(client?: SupabaseClient): SupabaseClient {
 
 export type WorkshopLiveTable =
   | 'customers' | 'vehicles' | 'service_orders' | 'service_order_items' | 'service_order_time_entries'
-  | 'service_order_inspection_items' | 'service_order_technical_notes' | 'service_order_authorizations' | 'service_order_attachments'
-  | 'inventory_products' | 'inventory_movements' | 'suppliers' | 'purchases' | 'purchase_items'
+  | 'service_order_inspection_items' | 'service_order_technical_notes' | 'service_order_authorizations' | 'service_order_checklist_signatures' | 'service_order_attachments'
+  | 'inventory_products' | 'service_order_stock_products' | 'inventory_movements' | 'suppliers' | 'purchases' | 'purchase_items'
   | 'payables' | 'payable_payment_reversals' | 'estimates' | 'estimate_items' | 'estimate_events'
   | 'maintenance_reminders' | 'service_warranties' | 'financial_entries' | 'financial_entry_reversals'
   | 'workshop_member_permissions' | 'workshop_memberships' | 'workshops';
@@ -369,6 +371,14 @@ export async function listServiceOrderInspection(workshopId: string, orderId: st
   return (data ?? []) as ServiceOrderInspectionItem[];
 }
 
+export async function listServiceOrderStockProducts(workshopId: string, client?: SupabaseClient): Promise<ServiceOrderStockProduct[]> {
+  const supabase = clientOrDefault(client);
+  return fetchAllPages((from, to) => supabase.from('service_order_stock_products')
+    .select('id, workshop_id, name, code, category, brand, quantity, sale_price')
+    .eq('workshop_id', workshopId).eq('active', true).gt('quantity', 0)
+    .order('name', { ascending: true }).order('id', { ascending: true }).range(from, to)) as Promise<ServiceOrderStockProduct[]>;
+}
+
 export async function saveServiceOrderInspectionItem(workshopId: string, item: ServiceOrderInspectionItem, client?: SupabaseClient): Promise<void> {
   const { error } = await clientOrDefault(client).from('service_order_inspection_items').update({
     condition: item.condition, observations: item.observations.trim(), recommendation: item.recommendation.trim(), updated_at: new Date().toISOString(),
@@ -396,6 +406,45 @@ export async function listServiceOrderAuthorizations(workshopId: string, orderId
     .eq('workshop_id', workshopId).eq('service_order_id', orderId).order('signed_at', { ascending: false });
   if (error) throwFriendly(error);
   return (data ?? []) as ServiceOrderAuthorization[];
+}
+
+export async function listServiceOrderChecklistSignatures(workshopId: string, orderId: string, client?: SupabaseClient): Promise<ServiceOrderChecklistSignature[]> {
+  const { data, error } = await clientOrDefault(client).from('service_order_checklist_signatures').select('*')
+    .eq('workshop_id', workshopId).eq('service_order_id', orderId).order('signed_at', { ascending: false });
+  if (error) throwFriendly(error);
+  return (data ?? []) as ServiceOrderChecklistSignature[];
+}
+
+export async function createServiceOrderChecklistSignature(
+  workshopId: string,
+  orderId: string,
+  customerId: string,
+  decision: ServiceOrderChecklistDecision,
+  signerName: string,
+  statement: string,
+  checklistSnapshot: ServiceOrderChecklistSignature['checklist_snapshot'],
+  signatureStrokes: SignaturePoint[][],
+  client?: SupabaseClient,
+): Promise<void> {
+  const normalizedStrokes = signatureStrokes.map((stroke) => stroke.map((point) => ({ x: Number(point.x.toFixed(4)), y: Number(point.y.toFixed(4)) })));
+  const pointCount = normalizedStrokes.reduce((count, stroke) => count + stroke.length, 0);
+  if (decision !== 'authorized' && decision !== 'not_authorized') throw new Error('Selecione se o cliente autorizou ou não o serviço.');
+  if (signerName.trim().length < 2 || signerName.trim().length > 180) throw new Error('Informe o nome de quem assinou.');
+  if (statement.trim().length < 5 || statement.trim().length > 2000) throw new Error('Descreva o que o cliente declarou.');
+  if (!checklistSnapshot.length || checklistSnapshot.length > 80) throw new Error('O checklist não contém uma quantidade válida de itens.');
+  if (normalizedStrokes.length < 1 || normalizedStrokes.length > 80 || pointCount < 2 || pointCount > 5000
+    || normalizedStrokes.some((stroke) => stroke.length < 1 || stroke.length > 1000 || stroke.some((point) => point.x < 0 || point.x > 1 || point.y < 0 || point.y > 1))) {
+    throw new Error('Desenhe a assinatura antes de registrar o checklist.');
+  }
+  if (JSON.stringify(normalizedStrokes).length > 90_000 || JSON.stringify(checklistSnapshot).length > 450_000) {
+    throw new Error('O registro excede o tamanho permitido. Revise o checklist e tente novamente.');
+  }
+  const { error } = await clientOrDefault(client).from('service_order_checklist_signatures').insert({
+    workshop_id: workshopId, service_order_id: orderId, customer_id: customerId,
+    customer_decision: decision, signer_name: signerName.trim(), statement: statement.trim(),
+    checklist_snapshot: checklistSnapshot, signature_strokes: normalizedStrokes,
+  });
+  if (error) throwFriendly(error);
 }
 
 export async function createServiceOrderAuthorization(

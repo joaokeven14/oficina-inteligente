@@ -21,7 +21,6 @@ const conditions: Array<{ value: ServiceOrderInspectionItem['condition']; label:
 export default function ServiceOrderInspectionPanel({ workshopId, orderId, canUpdate }: { workshopId: string; orderId: string; canUpdate: boolean }) {
   const [items, setItems] = useState<ServiceOrderInspectionItem[]>([]);
   const [notes, setNotes] = useState<ServiceOrderTechnicalNote[]>([]);
-  const [kind, setKind] = useState<'checklist' | 'inspection'>('checklist');
   const [category, setCategory] = useState<ServiceOrderTechnicalNote['category']>('Motor');
   const [body, setBody] = useState('');
   const [recommendation, setRecommendation] = useState(true);
@@ -53,12 +52,11 @@ export default function ServiceOrderInspectionPanel({ workshopId, orderId, canUp
   };
 
   if (loading) return <ActivityIndicator style={styles.loading} color="#e97824" />;
-  const current = items.filter((item) => item.item_kind === kind);
+  const current = items.filter((item) => item.item_kind === 'inspection');
   const checked = current.filter((item) => item.condition !== 'not_inspected').length;
   return <View style={styles.wrapper}>
-    <Text style={styles.sectionTitle}>Checklist de entrada e laudo</Text>
-    <Text style={styles.helper}>Itens não inspecionados permanecem explicitamente pendentes; nenhuma condição é aprovada automaticamente.</Text>
-    <View style={styles.tabs}>{(['checklist','inspection'] as const).map((value) => <Pressable key={value} style={[styles.tab, kind === value && styles.tabActive]} onPress={() => setKind(value)}><Text style={[styles.tabText, kind === value && styles.tabTextActive]}>{value === 'checklist' ? 'Entrada do veículo' : 'Inspeção técnica'}</Text></Pressable>)}</View>
+    <Text style={styles.sectionTitle}>Inspeção técnica e laudo</Text>
+    <Text style={styles.helper}>O checklist de entrada fica em uma tela própria. Nesta área, registre os itens técnicos e as notas da oficina.</Text>
     <Text style={styles.progress}>{checked} de {current.length} itens avaliados</Text>
     {current.map((item) => <View key={item.id} style={styles.itemCard}>
       <Text style={styles.itemLabel}>{item.item_label}</Text>
@@ -80,4 +78,4 @@ export default function ServiceOrderInspectionPanel({ workshopId, orderId, canUp
   </View>;
 }
 
-const styles = StyleSheet.create({ wrapper: { marginTop: 16 }, loading: { padding: 20 }, sectionTitle: { marginTop: 18, marginBottom: 6, color: '#10243a', fontSize: 16, fontWeight: '800' }, helper: { color: '#718197', fontSize: 11, lineHeight: 17 }, progress: { marginVertical: 8, color: '#52657a', fontSize: 11, fontWeight: '700' }, tabs: { flexDirection: 'row', gap: 7, marginTop: 10 }, tab: { padding: 9, borderWidth: 1, borderColor: '#dce3eb', borderRadius: 8 }, tabActive: { backgroundColor: '#10243a', borderColor: '#10243a' }, tabText: { color: '#53657b', fontSize: 11 }, tabTextActive: { color: '#fff', fontWeight: '700' }, itemCard: { marginTop: 9, padding: 12, borderWidth: 1, borderColor: '#e1e8ef', borderRadius: 10, backgroundColor: '#fff' }, itemLabel: { color: '#26394e', fontSize: 12, fontWeight: '800' }, conditions: { flexDirection: 'row', flexWrap: 'wrap', gap: 5, marginTop: 7 }, condition: { paddingHorizontal: 8, paddingVertical: 7, borderWidth: 1, borderColor: '#dce3eb', borderRadius: 8 }, conditionActive: { backgroundColor: '#10243a', borderColor: '#10243a' }, conditionText: { color: '#53657b', fontSize: 10 }, conditionTextActive: { color: '#fff', fontWeight: '700' }, saveButton: { minHeight: 38, marginTop: 9, alignItems: 'center', justifyContent: 'center', borderRadius: 8, backgroundColor: '#e97824' }, saveText: { color: '#fff', fontSize: 11, fontWeight: '800' }, templateButton: { padding: 10, marginTop: 8, borderRadius: 8, backgroundColor: '#fff5ed' }, templateText: { color: '#8d4c19', fontSize: 11, lineHeight: 16 }, noteCard: { padding: 11, marginTop: 8, borderWidth: 1, borderColor: '#e1e8ef', borderRadius: 9, backgroundColor: '#fff' }, noteDate: { marginTop: 5, color: '#8b98a7', fontSize: 9 }, error: { marginTop: 8, color: '#a23d33', fontSize: 12 } });
+const styles = StyleSheet.create({ wrapper: { marginTop: 16 }, loading: { padding: 20 }, sectionTitle: { marginTop: 18, marginBottom: 6, color: '#10243a', fontSize: 16, fontWeight: '800' }, helper: { color: '#718197', fontSize: 11, lineHeight: 17 }, progress: { marginVertical: 8, color: '#52657a', fontSize: 11, fontWeight: '700' }, itemCard: { marginTop: 9, padding: 12, borderWidth: 1, borderColor: '#e1e8ef', borderRadius: 10, backgroundColor: '#fff' }, itemLabel: { color: '#26394e', fontSize: 12, fontWeight: '800' }, conditions: { flexDirection: 'row', flexWrap: 'wrap', gap: 5, marginTop: 7 }, condition: { paddingHorizontal: 8, paddingVertical: 7, borderWidth: 1, borderColor: '#dce3eb', borderRadius: 8 }, conditionActive: { backgroundColor: '#10243a', borderColor: '#10243a' }, conditionText: { color: '#53657b', fontSize: 10 }, conditionTextActive: { color: '#fff', fontWeight: '700' }, saveButton: { minHeight: 38, marginTop: 9, alignItems: 'center', justifyContent: 'center', borderRadius: 8, backgroundColor: '#e97824' }, saveText: { color: '#fff', fontSize: 11, fontWeight: '800' }, templateButton: { padding: 10, marginTop: 8, borderRadius: 8, backgroundColor: '#fff5ed' }, templateText: { color: '#8d4c19', fontSize: 11, lineHeight: 16 }, noteCard: { padding: 11, marginTop: 8, borderWidth: 1, borderColor: '#e1e8ef', borderRadius: 9, backgroundColor: '#fff' }, noteDate: { marginTop: 5, color: '#8b98a7', fontSize: 9 }, error: { marginTop: 8, color: '#a23d33', fontSize: 12 } });
