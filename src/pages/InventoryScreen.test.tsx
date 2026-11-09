@@ -3,6 +3,7 @@ import ReactTestRenderer from 'react-test-renderer';
 import InventoryScreen from './InventoryScreen';
 import { getWorkshopPermissions, listInventoryProducts } from '../services/workshopData';
 
+jest.mock('../hooks/useWorkshopLiveRefresh', () => ({ useWorkshopLiveRefresh: jest.fn() }));
 jest.mock('../services/workshopData', () => ({
   archiveInventoryProduct: jest.fn(),
   getWorkshopPermissions: jest.fn(),
@@ -10,6 +11,7 @@ jest.mock('../services/workshopData', () => ({
   listInventoryProducts: jest.fn(),
   recordInventoryMovement: jest.fn(),
   saveInventoryProduct: jest.fn(),
+  subscribeWorkshopLiveUpdates: jest.fn(() => () => undefined),
 }));
 
 const mockPermissions = jest.mocked(getWorkshopPermissions);

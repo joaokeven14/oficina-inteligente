@@ -13,7 +13,7 @@ const toTime = (value: string | null) => value ? new Date(value).getTime() : nul
 
 type Data = { customers: Customer[]; vehicles: Vehicle[]; orders: ServiceOrder[]; estimates: Estimate[]; stock: InventoryProduct[]; purchases: Purchase[]; entries: FinancialEntry[]; payables: Payable[]; reminders: MaintenanceReminder[]; warranties: ServiceWarranty[]; employees: WorkshopEmployee[] };
 
-export default function ReportsScreen({ workshopId, workshopName, isOwner }: { workshopId: string; workshopName: string; isOwner: boolean }) {
+export default function ReportsScreen({ workshopId, workshopName }: { workshopId: string; workshopName: string; isOwner: boolean }) {
   const today = new Date();
   const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
   const [from, setFrom] = useState(dateValue(monthStart));
@@ -49,7 +49,7 @@ export default function ReportsScreen({ workshopId, workshopName, isOwner }: { w
       setCanLoadProductivity(permissions.reports.view && permissions.employees.view);
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Não foi possível montar os relatórios.'); }
     finally { setLoading(false); }
-  }, [workshopId, isOwner]);
+  }, [workshopId]);
   useEffect(() => { refresh(); }, [refresh]);
   useWorkshopLiveRefresh(workshopId, ['customers', 'vehicles', 'service_orders', 'service_order_items', 'estimates', 'estimate_items', 'inventory_products', 'inventory_movements', 'suppliers', 'purchases', 'purchase_items', 'financial_entries', 'financial_entry_reversals', 'payables', 'payable_payment_reversals', 'maintenance_reminders', 'service_warranties'], refresh);
 

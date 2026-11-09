@@ -3,7 +3,8 @@ import ReactTestRenderer from 'react-test-renderer';
 import HomeScreen from './HomeScreen';
 import { listCurrentWorkshops, getDashboardMetrics, getFinanceDashboardMetrics, getWorkshopPermissions, isPlatformAdministrator } from '../services/workshopData';
 
-jest.mock('../services/workshopData', () => ({ listCurrentWorkshops: jest.fn(), getDashboardMetrics: jest.fn(), getFinanceDashboardMetrics: jest.fn(), getWorkshopPermissions: jest.fn(), isPlatformAdministrator: jest.fn() }));
+jest.mock('../hooks/useWorkshopLiveRefresh', () => ({ useWorkshopLiveRefresh: jest.fn() }));
+jest.mock('../services/workshopData', () => ({ listCurrentWorkshops: jest.fn(), getDashboardMetrics: jest.fn(), getFinanceDashboardMetrics: jest.fn(), getWorkshopPermissions: jest.fn(), isPlatformAdministrator: jest.fn(), subscribeWorkshopLiveUpdates: jest.fn(() => () => undefined) }));
 const current = jest.mocked(listCurrentWorkshops);
 const metrics = jest.mocked(getDashboardMetrics);
 const financeMetrics = jest.mocked(getFinanceDashboardMetrics);

@@ -24,8 +24,10 @@ export function useWorkshopLiveRefresh(workshopId: string, tables: readonly Work
     const refreshInterval = setInterval(scheduleRefresh, 60_000);
     const handleFocus = () => scheduleRefresh();
     const handleVisibility = () => { if (document.visibilityState === 'visible') scheduleRefresh(); };
-    if (typeof window !== 'undefined') window.addEventListener('focus', handleFocus);
-    if (typeof document !== 'undefined') document.addEventListener('visibilitychange', handleVisibility);
+    const supportsWindowEvents = typeof window !== 'undefined' && typeof window.addEventListener === 'function';
+    const supportsDocumentEvents = typeof document !== 'undefined' && typeof document.addEventListener === 'function';
+    if (supportsWindowEvents) window.addEventListener('focus', handleFocus);
+    if (supportsDocumentEvents) document.addEventListener('visibilitychange', handleVisibility);
 
     return () => {
       active = false;
@@ -33,8 +35,8 @@ export function useWorkshopLiveRefresh(workshopId: string, tables: readonly Work
       clearInterval(refreshInterval);
       unsubscribe();
       appStateSubscription.remove();
-      if (typeof window !== 'undefined') window.removeEventListener('focus', handleFocus);
-      if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', handleVisibility);
+      if (supportsWindowEvents) window.removeEventListener('focus', handleFocus);
+      if (supportsDocumentEvents) document.removeEventListener('visibilitychange', handleVisibility);
     };
   }, [enabled, refresh, tableKey, workshopId]);
 }

@@ -4,8 +4,9 @@ import ReportsScreen from './ReportsScreen';
 import { openPrintableDocument } from '../utils/printDocument';
 import { getEmployeeProductivity, getWorkshopPermissions, getWorkshopSettings, listCustomers, listEstimates, listFinancialEntries, listInventoryProducts, listMaintenanceReminders, listPayables, listPurchases, listServiceOrders, listServiceWarranties, listVehicles, listWorkshopEmployees } from '../services/workshopData';
 
+jest.mock('../hooks/useWorkshopLiveRefresh', () => ({ useWorkshopLiveRefresh: jest.fn() }));
 jest.mock('../services/workshopData', () => ({
-  getEmployeeProductivity: jest.fn(), getWorkshopPermissions: jest.fn(), getWorkshopSettings: jest.fn(), listCustomers: jest.fn(), listEstimates: jest.fn(), listFinancialEntries: jest.fn(), listInventoryProducts: jest.fn(), listMaintenanceReminders: jest.fn(), listPayables: jest.fn(), listPurchases: jest.fn(), listServiceOrders: jest.fn(), listServiceWarranties: jest.fn(), listVehicles: jest.fn(), listWorkshopEmployees: jest.fn(),
+  getEmployeeProductivity: jest.fn(), getWorkshopPermissions: jest.fn(), getWorkshopSettings: jest.fn(), listCustomers: jest.fn(), listEstimates: jest.fn(), listFinancialEntries: jest.fn(), listInventoryProducts: jest.fn(), listMaintenanceReminders: jest.fn(), listPayables: jest.fn(), listPurchases: jest.fn(), listServiceOrders: jest.fn(), listServiceWarranties: jest.fn(), listVehicles: jest.fn(), listWorkshopEmployees: jest.fn(), subscribeWorkshopLiveUpdates: jest.fn(() => () => undefined),
 }));
 jest.mock('../utils/printDocument', () => ({ openPrintableDocument: jest.fn().mockResolvedValue(undefined) }));
 

@@ -4,9 +4,10 @@ import { Text } from 'react-native';
 import EstimatesScreen from './EstimatesScreen';
 import { getWorkshopPermissions, listCustomers, listEstimates, listVehicles, reviewEstimate } from '../services/workshopData';
 
+jest.mock('../hooks/useWorkshopLiveRefresh', () => ({ useWorkshopLiveRefresh: jest.fn() }));
 jest.mock('../services/workshopData', () => ({
   convertEstimate: jest.fn(), createEstimate: jest.fn(), getWorkshopPermissions: jest.fn(), listCustomers: jest.fn(),
-  listEstimates: jest.fn(), listVehicles: jest.fn(), reviewEstimate: jest.fn(),
+  listEstimates: jest.fn(), listVehicles: jest.fn(), reviewEstimate: jest.fn(), subscribeWorkshopLiveUpdates: jest.fn(() => () => undefined),
 }));
 const mockEstimates = jest.mocked(listEstimates);
 const mockCustomers = jest.mocked(listCustomers);

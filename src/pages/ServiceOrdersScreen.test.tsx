@@ -3,6 +3,7 @@ import ReactTestRenderer from 'react-test-renderer';
 import ServiceOrdersScreen from './ServiceOrdersScreen';
 import { getMyActiveServiceOrderTimer, getWorkshopPermissions, listCustomers, listServiceOrderInspection, listServiceOrderItems, listServiceOrderTechnicalNotes, listServiceOrders, listVehicles, listWorkshopEmployees } from '../services/workshopData';
 
+jest.mock('../hooks/useWorkshopLiveRefresh', () => ({ useWorkshopLiveRefresh: jest.fn() }));
 jest.mock('../services/workshopData', () => ({
   archiveServiceOrderItem: jest.fn(),
   createServiceOrder: jest.fn(),
@@ -13,11 +14,13 @@ jest.mock('../services/workshopData', () => ({
   stopServiceOrderTimer: jest.fn(),
   listServiceOrderInspection: jest.fn(),
   listCustomers: jest.fn(),
+  listServiceOrderStockProducts: jest.fn().mockResolvedValue([]),
   listServiceOrderTechnicalNotes: jest.fn(),
   listServiceOrderItems: jest.fn(),
   listServiceOrders: jest.fn(),
   listVehicles: jest.fn(),
   listWorkshopEmployees: jest.fn(),
+  subscribeWorkshopLiveUpdates: jest.fn(() => () => undefined),
   serviceOrderStatuses: [
     { value: 'open', label: 'Aberta' }, { value: 'diagnosis', label: 'Em diagnóstico' },
     { value: 'awaiting_approval', label: 'Aguardando aprovação' }, { value: 'awaiting_parts', label: 'Aguardando peças' },
@@ -30,6 +33,7 @@ jest.mock('../services/workshopData', () => ({
 
 const mockPermissions = jest.mocked(getWorkshopPermissions);
 const mockOrders = jest.mocked(listServiceOrders);
+let activeScreen: ReactTestRenderer.ReactTestRenderer | undefined;
 
 async function renderScreen() {
   let screen: ReactTestRenderer.ReactTestRenderer;
@@ -37,7 +41,8 @@ async function renderScreen() {
     screen = ReactTestRenderer.create(<ServiceOrdersScreen workshopId="workshop-1" />);
     await new Promise<void>((resolve) => setImmediate(resolve));
   });
-  return screen!;
+  activeScreen = screen!;
+  return activeScreen;
 }
 
 const allDenied = {
@@ -61,6 +66,11 @@ beforeEach(() => {
   jest.mocked(listWorkshopEmployees).mockResolvedValue([]);
   jest.mocked(getMyActiveServiceOrderTimer).mockResolvedValue(null);
   jest.mocked(listServiceOrderItems).mockResolvedValue([]);
+});
+
+afterEach(async () => {
+  if (activeScreen) await ReactTestRenderer.act(async () => { activeScreen?.unmount(); });
+  activeScreen = undefined;
 });
 
 test('does not offer order creation without create permission', async () => {

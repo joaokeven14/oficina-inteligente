@@ -4,9 +4,11 @@ import ReactTestRenderer from 'react-test-renderer';
 import ServiceOrderAuthorizationPanel from './ServiceOrderAuthorizationPanel';
 import { createServiceOrderAuthorization, listServiceOrderAuthorizations } from '../services/workshopData';
 
+jest.mock('../hooks/useWorkshopLiveRefresh', () => ({ useWorkshopLiveRefresh: jest.fn() }));
 jest.mock('../services/workshopData', () => ({
   createServiceOrderAuthorization: jest.fn(),
   listServiceOrderAuthorizations: jest.fn(),
+  subscribeWorkshopLiveUpdates: jest.fn(() => () => undefined),
 }));
 
 const props = { workshopId: 'w1', orderId: 'o1', customerId: 'c1', customerName: 'Ana Silva', orderNumber: 12, amount: 120.5, canSign: true };

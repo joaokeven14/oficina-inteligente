@@ -3,10 +3,11 @@ import ReactTestRenderer from 'react-test-renderer';
 import PurchasesScreen from './PurchasesScreen';
 import { getWorkshopPermissions, listInventoryProducts, listPayablePaymentReversals, listPayables, listPurchases, listSuppliers } from '../services/workshopData';
 
+jest.mock('../hooks/useWorkshopLiveRefresh', () => ({ useWorkshopLiveRefresh: jest.fn() }));
 jest.mock('../services/workshopData', () => ({
   createPurchase: jest.fn(), getWorkshopPermissions: jest.fn(), listInventoryProducts: jest.fn(),
   listPayablePaymentReversals: jest.fn(), listPayables: jest.fn(), listPurchases: jest.fn(), listSuppliers: jest.fn(), markPayablePaid: jest.fn(), reversePayablePayment: jest.fn(),
-  receivePurchase: jest.fn(), saveSupplier: jest.fn(),
+  receivePurchase: jest.fn(), saveSupplier: jest.fn(), subscribeWorkshopLiveUpdates: jest.fn(() => () => undefined),
 }));
 
 const permissions = jest.mocked(getWorkshopPermissions);

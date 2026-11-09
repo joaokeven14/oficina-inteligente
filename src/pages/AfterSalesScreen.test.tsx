@@ -4,8 +4,10 @@ import AfterSalesScreen from './AfterSalesScreen';
 import { getWorkshopPermissions, getWorkshopSettings, listMaintenanceReminders, listServiceOrderItems, listServiceOrders, listServiceWarranties, listVehicles } from '../services/workshopData';
 import { openPrintableDocument } from '../utils/printDocument';
 
+jest.mock('../hooks/useWorkshopLiveRefresh', () => ({ useWorkshopLiveRefresh: jest.fn() }));
 jest.mock('../services/workshopData', () => ({
   completeMaintenanceReminder: jest.fn(), createMaintenanceReminder: jest.fn(), createServiceWarranty: jest.fn(), getWorkshopPermissions: jest.fn(), getWorkshopSettings: jest.fn(),
+  subscribeWorkshopLiveUpdates: jest.fn(() => () => undefined),
   listMaintenanceReminders: jest.fn(), listServiceOrderItems: jest.fn(), listServiceOrders: jest.fn(), listServiceWarranties: jest.fn(), listVehicles: jest.fn(),
 }));
 jest.mock('../utils/printDocument', () => ({ openPrintableDocument: jest.fn().mockResolvedValue(undefined) }));

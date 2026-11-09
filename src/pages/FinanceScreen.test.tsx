@@ -3,8 +3,9 @@ import ReactTestRenderer from 'react-test-renderer';
 import FinanceScreen from './FinanceScreen';
 import { getWorkshopPermissions, listCustomers, listFinancialEntries, listFinancialEntryReversals, listPayables } from '../services/workshopData';
 
+jest.mock('../hooks/useWorkshopLiveRefresh', () => ({ useWorkshopLiveRefresh: jest.fn() }));
 jest.mock('../services/workshopData', () => ({
-  createFinancialEntry: jest.fn(), getWorkshopPermissions: jest.fn(), listCustomers: jest.fn(), listFinancialEntries: jest.fn(), listFinancialEntryReversals: jest.fn(), listPayables: jest.fn(), markPayablePaid: jest.fn(), reverseFinancialEntry: jest.fn(), settleFinancialEntry: jest.fn(),
+  createFinancialEntry: jest.fn(), getWorkshopPermissions: jest.fn(), listCustomers: jest.fn(), listFinancialEntries: jest.fn(), listFinancialEntryReversals: jest.fn(), listPayables: jest.fn(), markPayablePaid: jest.fn(), reverseFinancialEntry: jest.fn(), settleFinancialEntry: jest.fn(), subscribeWorkshopLiveUpdates: jest.fn(() => () => undefined),
 }));
 
 test('shows received and pending financial entries using persisted data', async () => {

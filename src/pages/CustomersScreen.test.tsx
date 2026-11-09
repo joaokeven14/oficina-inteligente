@@ -3,11 +3,13 @@ import ReactTestRenderer from 'react-test-renderer';
 import CustomersScreen from './CustomersScreen';
 import { getWorkshopPermissions, listCustomers } from '../services/workshopData';
 
+jest.mock('../hooks/useWorkshopLiveRefresh', () => ({ useWorkshopLiveRefresh: jest.fn() }));
 jest.mock('../services/workshopData', () => ({
   archiveCustomer: jest.fn(),
   getWorkshopPermissions: jest.fn(),
   listCustomers: jest.fn(),
   saveCustomer: jest.fn(),
+  subscribeWorkshopLiveUpdates: jest.fn(() => () => undefined),
 }));
 
 const mockPermissions = jest.mocked(getWorkshopPermissions);
